@@ -1,17 +1,20 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/shared/ui/button";
 import Image from "next/image";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 
 export function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
   const navContentRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
+  // Navbar entrance animation
   useEffect(() => {
     const loadGSAP = async () => {
       const { gsap } = await import("gsap");
@@ -27,30 +30,13 @@ export function Navbar() {
           {
             y: 0,
             opacity: 1,
-            duration: 1.2,
-            ease: "power3.out",
-            delay: 0.5,
+            duration: 0.8,
+            ease: "power2.out",
           }
         );
       }
 
-      // Menu items stagger animation
-      const menuItems = document.querySelectorAll(".nav-item");
-      gsap.fromTo(
-        menuItems,
-        {
-          y: -20,
-          opacity: 0,
-        },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.6,
-          stagger: 0.1,
-          delay: 1.2,
-          ease: "power2.out",
-        }
-      );
+      setIsLoaded(true);
     };
 
     loadGSAP();
@@ -151,16 +137,16 @@ export function Navbar() {
   }, []);
 
   const navItems = [
-    { name: "Battles", href: "#battles" },
-    { name: "Tournaments", href: "#tournaments" },
-    { name: "Leaderboard", href: "#leaderboard" },
-    { name: "Community", href: "#community" },
+    { name: "Battles", href: "/battles" },
+    { name: "Tournaments", href: "/tournaments" },
+    { name: "Leaderboard", href: "/leaderboard" },
+    { name: "Community", href: "/community" },
   ];
 
   return (
     <div
       ref={navContainerRef}
-      className="fixed top-0 left-0 right-0 z-50 w-full opacity-0"
+      className={`fixed top-0 left-0 right-0 z-50 w-full opacity-0`}
       style={{ willChange: "transform, top, left, right, width, opacity" }}
     >
       <div
@@ -174,22 +160,24 @@ export function Navbar() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <div className="flex items-center space-x-2 nav-item">
-              <div className="relative h-8 w-8">
-                <Image
-                  src="/logo-without-text.png"
-                  alt="DevBattle.gg Logo"
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className="object-contain"
-                  priority
-                />
-                <div className="absolute inset-0 bg-green-400/20 rounded-full blur-lg animate-pulse"></div>
+            <Link href="/">
+              <div className="flex items-center space-x-2 nav-item">
+                <div className="relative h-8 w-8">
+                  <Image
+                    src="/logo-without-text.png"
+                    alt="DevBattle.gg Logo"
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    className="object-contain"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-green-400/20 rounded-full blur-lg animate-pulse"></div>
+                </div>
+                <span className="text-lg font-bold text-green-400 hidden sm:block">
+                  devbattle.gg
+                </span>
               </div>
-              <span className="text-lg font-bold text-green-400 hidden sm:block">
-                devbattle.gg
-              </span>
-            </div>
+            </Link>
 
             {/* Desktop Navigation */}
             <div className="hidden lg:block">
@@ -198,7 +186,11 @@ export function Navbar() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className="nav-item text-gray-300 hover:text-green-400 px-3 py-2 text-sm font-medium transition-all duration-300 relative group"
+                    className={`nav-item text-gray-300 hover:text-green-400 px-3 py-2 text-sm font-medium transition-all duration-300 relative group ${
+                      pathname.startsWith(item.href)
+                        ? "text-green-400 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-green-400"
+                        : ""
+                    }`}
                   >
                     {item.name}
                     <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-green-400 group-hover:w-full transition-all duration-300 rounded-full"></span>
@@ -209,19 +201,18 @@ export function Navbar() {
 
             {/* Desktop Action Buttons */}
             <div className="hidden md:flex items-center space-x-3">
-              <Button
-                variant="ghost"
-                size="sm"
+              <Link
+                href="/auth/login"
                 className="nav-item text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
               >
                 Sign In
-              </Button>
-              <Button
-                size="sm"
+              </Link>
+              <Link
+                href="/auth/register"
                 className="nav-item bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold px-4 py-2 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-400/25"
               >
                 Join Battle
-              </Button>
+              </Link>
             </div>
 
             {/* Mobile menu button */}
@@ -256,15 +247,20 @@ export function Navbar() {
                   </Link>
                 ))}
                 <div className="pt-3 space-y-2">
-                  <Button
-                    variant="ghost"
-                    className="w-full text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl"
+                  <Link
+                    href="/login"
+                    className="block w-full text-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl py-2"
+                    onClick={() => setIsMenuOpen(false)}
                   >
                     Sign In
-                  </Button>
-                  <Button className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold rounded-xl">
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="block w-full text-center bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold rounded-xl py-2"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
                     Join Battle
-                  </Button>
+                  </Link>
                 </div>
               </div>
             </div>

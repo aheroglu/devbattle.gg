@@ -2,11 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Sayfa yükleme stili */
-body {
-  opacity: 0;
-}
-
 /* Tailwind CSS v4 Theme Configuration */
 @theme inline {
   /* Color Palette */
@@ -111,6 +106,7 @@ body {
   body {
     background-color: hsl(var(--color-background));
     color: hsl(var(--color-foreground));
+    cursor: url("/custom-cursor-32x32.png"), auto;
   }
 }
 

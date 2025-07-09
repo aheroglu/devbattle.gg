@@ -1,12 +1,12 @@
 import type React from "react";
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+import { InteractiveBackground } from "@/components/shared/interactive-background";
 
-const inter = Inter({ subsets: ["latin"] });
-const jetbrainsMono = JetBrains_Mono({
+const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  weight: ["100", "200", "300", "400", "500", "600", "700"],
 });
 
 export const viewport: Viewport = {
@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://devbattle.gg"),
-  title: "devbattle.gg - Real-time Coding Battles",
+  title: "Real-time Coding Battles - devbattle.gg",
   description:
     "The ultimate platform for competitive programming and skill development. Join real-time coding battles, earn XP, and dominate the leaderboard.",
   keywords: [
@@ -72,11 +72,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.className} ${jetbrainsMono.variable} antialiased`}
+        className={`${ibmPlexMono.className} antialiased bg-black text-white relative`}
       >
-        {children}
+        <div className="relative z-10">
+          <InteractiveBackground />
+          {children}
+        </div>
       </body>
     </html>
   );
