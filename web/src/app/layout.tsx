@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { InteractiveBackground } from "@/components/shared/interactive-background";
+import { Toaster } from "@/components/shared/ui/toaster";
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -79,6 +80,7 @@ export default function RootLayout({
         <div className="relative z-10">
           <InteractiveBackground />
           {children}
+          <Toaster />
         </div>
       </body>
     </html>

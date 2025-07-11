@@ -2,17 +2,93 @@
 
 import { Button } from "@/components/shared/ui/button";
 import Image from "next/image";
-import { Menu, X } from "lucide-react";
+import { Menu, X, LogOut, User, Settings } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/shared/ui/avatar";
+import { Skeleton } from "@/components/shared/ui/skeleton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/shared/ui/dropdown-menu";
+import { Profile } from "@/types";
 
 export function Navbar() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
+  const router = useRouter();
+  const supabase = createClientComponentClient();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
   const navContentRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+
+  useEffect(() => {
+    const getProfile = async () => {
+      try {
+        setIsLoading(true);
+
+        // Önce mevcut oturum bilgisini al
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          // Kullanıcı profil bilgilerini al
+          const { data: profile, error } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+
+          if (error) throw error;
+          setProfile(profile);
+        }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // İlk yüklemede profili getir
+    getProfile();
+
+    // Auth state değişikliklerini dinle
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN") {
+        // Yeni oturum açıldığında profili güncelle
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session?.user.id)
+          .single();
+
+        setProfile(profile);
+        setIsLoading(false);
+      } else if (event === "SIGNED_OUT") {
+        setProfile(null);
+        setIsLoading(false);
+      }
+    });
+
+    // Cleanup subscription
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   // Navbar entrance animation
   useEffect(() => {
@@ -136,6 +212,20 @@ export function Navbar() {
     loadGSAP();
   }, []);
 
+  const handleSignOut = async () => {
+    try {
+      console.log("Signing out...");
+      await supabase.auth.signOut();
+      setProfile(null);
+      setTimeout(() => {
+        router.refresh();
+        router.push("/auth/login");
+      }, 500);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   const navItems = [
     { name: "Battles", href: "/battles" },
     { name: "Tournaments", href: "/tournaments" },
@@ -201,18 +291,75 @@ export function Navbar() {
 
             {/* Desktop Action Buttons */}
             <div className="hidden md:flex items-center space-x-3">
-              <Link
-                href="/auth/login"
-                className="nav-item text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/auth/register"
-                className="nav-item bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold px-4 py-2 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-400/25"
-              >
-                Join Battle
-              </Link>
+              {isLoading ? (
+                <div className="flex items-center space-x-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                </div>
+              ) : profile ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="relative h-10 w-10 rounded-full"
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                          src={profile.avatar_url!}
+                          alt={profile.username}
+                        />
+                        <AvatarFallback>
+                          {profile.username[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    className="w-56 bg-black/90 backdrop-blur-xl border-green-400/30"
+                    align="end"
+                    forceMount
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer hover:bg-green-400/10 hover:text-green-400 focus:bg-green-400/10 focus:text-green-400"
+                      onClick={() =>
+                        profile?.username && router.push("/profile")
+                      }
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer hover:bg-green-400/10 hover:text-green-400 focus:bg-green-400/10 focus:text-green-400"
+                      onClick={() => router.push("/settings")}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-green-400/30" />
+                    <DropdownMenuItem
+                      className="cursor-pointer text-red-400 hover:bg-red-400/10 hover:text-red-400 focus:bg-red-400/10 focus:text-red-400"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sign Out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/login"
+                    className="nav-item p-2 text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/register"
+                    className="nav-item bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold px-4 py-2 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-400/25"
+                  >
+                    Join Battle
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile menu button */}
@@ -225,8 +372,10 @@ export function Navbar() {
               >
                 {isMenuOpen ? (
                   <X className="h-5 w-5" />
-                ) : (
+                ) : !isLoading ? (
                   <Menu className="h-5 w-5" />
+                ) : (
+                  <Skeleton className="h-5 w-5" />
                 )}
               </Button>
             </div>
@@ -246,22 +395,89 @@ export function Navbar() {
                     {item.name}
                   </Link>
                 ))}
-                <div className="pt-3 space-y-2">
-                  <Link
-                    href="/login"
-                    className="block w-full text-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl py-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="block w-full text-center bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold rounded-xl py-2"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    Join Battle
-                  </Link>
-                </div>
+                {isLoading ? (
+                  <div className="pt-3 space-y-2 border-t border-green-400/20">
+                    <div className="flex items-center space-x-3 px-3 py-2">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </div>
+                    <div className="space-y-2 px-3">
+                      <Skeleton className="h-10 w-full rounded-xl" />
+                      <Skeleton className="h-10 w-full rounded-xl" />
+                      <Skeleton className="h-10 w-full rounded-xl" />
+                    </div>
+                  </div>
+                ) : profile ? (
+                  <div className="pt-3 space-y-2 border-t border-green-400/20">
+                    <div className="flex items-center space-x-3 px-3 py-2">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                          src={profile.avatar_url!}
+                          alt={profile.username}
+                        />
+                        <AvatarFallback>
+                          {profile.username[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-green-400 font-medium">
+                          {profile.username}
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          {profile.full_name}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={"/profile"}
+                      className="flex items-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 px-3 py-2 rounded-xl"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <User className="h-4 w-4 mr-2" />
+                      Profile
+                    </Link>
+                    <Link
+                      href="/settings"
+                      className="flex items-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 px-3 py-2 rounded-xl"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Settings
+                    </Link>
+                    <button
+                      onClick={() => {
+                        handleSignOut();
+                        setIsMenuOpen(false);
+                      }}
+                      className="flex w-full items-center text-red-400 hover:bg-red-400/10 px-3 py-2 rounded-xl"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                ) : !isLoading ? (
+                  <div className="pt-3 space-y-2">
+                    <Link
+                      href="/auth/login"
+                      className="block w-full text-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl py-2"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      className="block w-full text-center bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold rounded-xl py-2"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Join Battle
+                    </Link>
+                  </div>
+                ) : (
+                  <Skeleton className="h-5 w-5" />
+                )}
               </div>
             </div>
           )}
