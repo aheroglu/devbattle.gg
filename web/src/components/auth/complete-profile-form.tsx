@@ -3,7 +3,6 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import multiavatar from "@multiavatar/multiavatar";
@@ -17,18 +16,7 @@ import {
   AlertDescription,
 } from "@/components/shared/ui/alert";
 
-import {
-  Eye,
-  EyeOff,
-  Github,
-  Mail,
-  Lock,
-  User,
-  ArrowLeft,
-  Trophy,
-  ArrowRight,
-  Check,
-} from "lucide-react";
+import { ArrowLeft, Trophy, ArrowRight, Check, User } from "lucide-react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 
 import {
@@ -37,11 +25,24 @@ import {
   experienceLevels,
 } from "./register-options";
 
-export default function RegisterForm() {
+interface CompleteProfileFormProps {
+  user: {
+    id: string;
+    email: string;
+    user_metadata: {
+      full_name?: string;
+      avatar_url?: string;
+      name?: string;
+      picture?: string;
+    };
+  };
+}
+
+export default function CompleteProfileForm({
+  user,
+}: CompleteProfileFormProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [alert, setAlert] = useState<{
     type: "success" | "error";
@@ -50,14 +51,20 @@ export default function RegisterForm() {
   const cardRef = useRef<HTMLDivElement>(null);
   const supabase = createClientComponentClient();
 
+  // Extract user info from OAuth providers (Google, GitHub)
+  const fullName =
+    user.user_metadata.full_name || 
+    user.user_metadata.name || 
+    user.user_metadata.user_name || 
+    "";
+  const avatarUrl =
+    user.user_metadata.avatar_url || 
+    user.user_metadata.picture || 
+    "";
+
   const [formData, setFormData] = useState({
-    // Step 1 - Basic Info
-    fullName: "",
+    // Step 1 - Username (full name is already from OAuth providers)
     username: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    agreeToTerms: false,
 
     // Step 2 - Developer Profile
     developerTitle: "",
@@ -73,7 +80,6 @@ export default function RegisterForm() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const statsRef = useRef<HTMLDivElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
 
   // GSAP Animations
   useEffect(() => {
@@ -96,63 +102,6 @@ export default function RegisterForm() {
             duration: 1,
             ease: "back.out(1.7)",
             delay: 0.3,
-          }
-        );
-      }
-
-      // Title animation
-      if (titleRef.current) {
-        gsap.fromTo(
-          titleRef.current,
-          {
-            opacity: 0,
-            y: 30,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.8,
-            delay: 0.6,
-            ease: "power2.out",
-          }
-        );
-      }
-
-      // Progress bar animation
-      if (progressRef.current) {
-        gsap.fromTo(
-          progressRef.current,
-          {
-            opacity: 0,
-            y: -20,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.6,
-            delay: 0.4,
-            ease: "power2.out",
-          }
-        );
-      }
-
-      // Stats animation
-      if (statsRef.current) {
-        gsap.fromTo(
-          statsRef.current.children,
-          {
-            opacity: 0,
-            y: 20,
-            scale: 0.8,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.6,
-            stagger: 0.1,
-            delay: 0.8,
-            ease: "power2.out",
           }
         );
       }
@@ -194,99 +143,59 @@ export default function RegisterForm() {
     setAlert(null);
 
     try {
-      // Basic validation
-      if (formData.password !== formData.confirmPassword) {
-        setAlert({
-          type: "error",
-          message: "Passwords do not match!",
-        });
-        return;
-      }
+      // Generate avatar from username if no OAuth avatar
+      const finalAvatarUrl =
+        avatarUrl ||
+        `data:image/svg+xml;base64,${btoa(multiavatar(formData.username))}`;
 
-      // Generate avatar from username
-      const svgCode = multiavatar(formData.username);
-      const avatarUrl = `data:image/svg+xml;base64,${btoa(svgCode)}`;
+      // Calculate level number
+      const levelNumber =
+        formData.experienceLevel === "junior"
+          ? 1
+          : formData.experienceLevel === "mid"
+          ? 2
+          : 3;
 
-      // Create user account
-      const { error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            username: formData.username,
-            full_name: formData.fullName,
-            avatar_url: avatarUrl,
-            title: formData.developerTitle,
-            preferred_languages: formData.techStack,
-            level:
-              formData.experienceLevel === "junior"
-                ? 1
-                : formData.experienceLevel === "mid"
-                ? 2
-                : 3,
-            picture: avatarUrl,
-          },
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+      // Extract GitHub URL if user signed up with GitHub
+      const githubUrl = user.user_metadata.user_name 
+        ? `https://github.com/${user.user_metadata.user_name}`
+        : null;
+
+      // Update profiles table
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          username: formData.username,
+          full_name: fullName,
+          avatar_url: finalAvatarUrl,
+          title: formData.developerTitle,
+          preferred_languages: formData.techStack,
+          level: levelNumber,
+          github_url: githubUrl,
+        })
+        .eq("id", user.id);
+
+      if (profileError) throw profileError;
+
+      // Update user metadata to mark profile as completed
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          profile_completed: true,
         },
       });
 
       if (authError) throw authError;
 
+      // Refresh session to get updated metadata
+      await supabase.auth.refreshSession();
+
       setAlert({
         type: "success",
-        message: "Please check your email for a verification link.",
-      });
-      router.push("/auth/login");
-    } catch (error: any) {
-      setAlert({
-        type: "error",
-        message: error.message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?type=signup`,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
+        message: "Profile completed successfully!",
       });
 
-      if (error) throw error;
-    } catch (error: any) {
-      setAlert({
-        type: "error",
-        message: error.message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleGithubSignIn = async () => {
-    try {
-      setIsLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "github",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback?type=signup`,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-
-      if (error) throw error;
+      // Redirect to home page to ensure middleware picks up the updated profile_completed flag
+      router.push("/");
     } catch (error: any) {
       setAlert({
         type: "error",
@@ -298,10 +207,10 @@ export default function RegisterForm() {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     });
   };
 
@@ -340,13 +249,7 @@ export default function RegisterForm() {
   const canProceed = () => {
     switch (currentStep) {
       case 1:
-        return (
-          formData.username &&
-          formData.email &&
-          formData.password &&
-          formData.confirmPassword &&
-          formData.agreeToTerms
-        );
+        return formData.username;
       case 2:
         return formData.developerTitle;
       case 3:
@@ -365,7 +268,7 @@ export default function RegisterForm() {
           variant="ghost"
           size="sm"
           className="text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
-          onClick={() => router.back()}
+          onClick={() => router.push("/auth/login")}
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Go Back
@@ -375,26 +278,32 @@ export default function RegisterForm() {
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-2xl">
-          {/* Registration Card */}
+          {/* Profile Completion Card */}
           <Card
             ref={cardRef}
             className="bg-black/80 border-green-400/30 backdrop-blur-sm rounded-2xl shadow-2xl shadow-green-400/10"
           >
             <CardHeader className="text-center">
               <CardTitle className="text-green-400 text-xl">
-                {currentStep === 1 && "Create Account"}
+                {currentStep === 1 && "Choose Username"}
                 {currentStep === 2 && "Choose Your Path"}
                 {currentStep === 3 && "Select Technologies"}
                 {currentStep === 4 && "Experience Level"}
               </CardTitle>
-              <div className="flex justify-center space-x-2 mt-4">
-                <Badge className="bg-green-500/20 text-green-400 border-green-400/30 rounded-full">
-                  <Trophy className="w-3 h-3 mr-1" />
-                  FREE
-                </Badge>
+              <div className="flex justify-center items-center space-x-4 mt-4">
+                <div className="flex items-center space-x-2">
+                  <img
+                    src={avatarUrl}
+                    alt={fullName}
+                    className="w-10 h-10 rounded-full border-2 border-green-400/30"
+                  />
+                  <div className="text-left">
+                    <p className="text-sm text-gray-300">{fullName}</p>
+                    <p className="text-xs text-gray-500">{user.email}</p>
+                  </div>
+                </div>
                 <Badge className="bg-blue-500/20 text-blue-400 border-blue-400/30 rounded-full">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></div>
-                  INSTANT
+                  Complete Profile
                 </Badge>
               </div>
             </CardHeader>
@@ -416,92 +325,25 @@ export default function RegisterForm() {
                   <AlertDescription>{alert.message}</AlertDescription>
                 </Alert>
               )}
+
               <form
                 ref={formRef}
                 onSubmit={handleSubmit}
                 className="space-y-6"
                 autoComplete="off"
               >
-                {/* Step 1: Basic Information */}
+                {/* Step 1: Username */}
                 {currentStep === 1 && (
-                  <>
-                    {/* Social Register Buttons */}
-                    <div className="flex space-x-3">
-                      <Button
-                        type="button"
-                        className="form-element flex-1 bg-gray-900/50 hover:bg-gray-800/70 text-gray-300 hover:text-white border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 rounded-xl"
-                        onClick={() => handleGithubSignIn()}
-                      >
-                        <Github className="h-5 w-5 mr-2" />
-                        Continue with GitHub
-                      </Button>
-                      <Button
-                        type="button"
-                        className="form-element flex-1 bg-gray-900/50 hover:bg-gray-800/70 text-gray-300 hover:text-white border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 rounded-xl"
-                        onClick={() => handleGoogleSignIn()}
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 48 48"
-                          className="h-5 w-5 mr-2"
-                        >
-                          <path
-                            fill="#FFC107"
-                            d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"
-                          />
-                          <path
-                            fill="#FF3D00"
-                            d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"
-                          />
-                          <path
-                            fill="#4CAF50"
-                            d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"
-                          />
-                          <path
-                            fill="#1976D2"
-                            d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"
-                          />
-                        </svg>
-                        Continue with Google
-                      </Button>
+                  <div className="space-y-6">
+                    <div className="text-center mb-6">
+                      <h3 className="text-lg font-semibold text-green-400 mb-2">
+                        Choose your username
+                      </h3>
+                      <p className="text-gray-400 text-sm">
+                        This will be your display name in battles
+                      </p>
                     </div>
 
-                    {/* Divider */}
-                    <div className="form-element relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-green-400/20" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-black px-2 text-gray-500">
-                          Or create with email
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Full Name Field */}
-                    <div className="form-element space-y-2">
-                      <label
-                        htmlFor="fullName"
-                        className="text-sm font-medium text-gray-300"
-                      >
-                        Full Name
-                      </label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                        <input
-                          id="fullName"
-                          name="fullName"
-                          type="text"
-                          required
-                          value={formData.fullName}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-4 py-3 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300"
-                          placeholder="John Doe"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Username Field */}
                     <div className="form-element space-y-2">
                       <label
                         htmlFor="username"
@@ -522,134 +364,8 @@ export default function RegisterForm() {
                           placeholder="codeNinja_42"
                         />
                       </div>
-                      <p className="text-xs text-gray-500">
-                        This will be your display name in battles
-                      </p>
                     </div>
-
-                    {/* Email Field */}
-                    <div className="form-element space-y-2">
-                      <label
-                        htmlFor="email"
-                        className="text-sm font-medium text-gray-300"
-                      >
-                        Email Address
-                      </label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                        <input
-                          id="email"
-                          name="email"
-                          type="email"
-                          required
-                          value={formData.email}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-4 py-3 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300"
-                          placeholder="developer@example.com"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Password Field */}
-                    <div className="form-element space-y-2">
-                      <label
-                        htmlFor="password"
-                        className="text-sm font-medium text-gray-300"
-                      >
-                        Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                        <input
-                          id="password"
-                          name="password"
-                          type={showPassword ? "text" : "password"}
-                          required
-                          value={formData.password}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-12 py-3 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300"
-                          placeholder="Create a strong password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors duration-300"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Confirm Password Field */}
-                    <div className="form-element space-y-2">
-                      <label
-                        htmlFor="confirmPassword"
-                        className="text-sm font-medium text-gray-300"
-                      >
-                        Confirm Password
-                      </label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                        <input
-                          id="confirmPassword"
-                          name="confirmPassword"
-                          type={showConfirmPassword ? "text" : "password"}
-                          required
-                          value={formData.confirmPassword}
-                          onChange={handleInputChange}
-                          className="w-full pl-10 pr-12 py-3 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300"
-                          placeholder="Confirm your password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setShowConfirmPassword(!showConfirmPassword)
-                          }
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors duration-300"
-                        >
-                          {showConfirmPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Terms Agreement */}
-                    <div className="form-element">
-                      <label className="flex items-start space-x-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="agreeToTerms"
-                          checked={formData.agreeToTerms}
-                          onChange={handleInputChange}
-                          required
-                          className="w-4 h-4 mt-1 text-green-400 bg-gray-900 border-green-400/30 rounded focus:ring-green-400 focus:ring-2"
-                        />
-                        <span className="text-sm text-gray-300">
-                          I agree to the{" "}
-                          <Link
-                            href="/terms"
-                            className="text-green-400 hover:text-green-300 transition-colors duration-300"
-                          >
-                            Terms of Service
-                          </Link>{" "}
-                          and{" "}
-                          <Link
-                            href="/privacy"
-                            className="text-green-400 hover:text-green-300 transition-colors duration-300"
-                          >
-                            Privacy Policy
-                          </Link>
-                        </span>
-                      </label>
-                    </div>
-                  </>
+                  </div>
                 )}
 
                 {/* Step 2: Developer Profile */}
@@ -907,7 +623,7 @@ export default function RegisterForm() {
                     ) : currentStep === 4 ? (
                       <div className="flex items-center space-x-2">
                         <Trophy className="h-4 w-4" />
-                        <span>Complete</span>
+                        <span>Complete Profile</span>
                       </div>
                     ) : (
                       <div className="flex items-center space-x-2">
@@ -918,19 +634,6 @@ export default function RegisterForm() {
                   </Button>
                 </div>
               </form>
-
-              {/* Login Link */}
-              <div className="form-element text-center pt-4 border-t border-green-400/20">
-                <p className="text-gray-400">
-                  Already have an account?{" "}
-                  <Link
-                    href="/auth/login"
-                    className="text-green-400 hover:text-green-300 font-semibold transition-colors duration-300"
-                  >
-                    Sign in here
-                  </Link>
-                </p>
-              </div>
             </CardContent>
           </Card>
         </div>

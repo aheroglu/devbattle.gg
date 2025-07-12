@@ -21,10 +21,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/shared/ui/dropdown-menu";
 import { Profile } from "@/types";
+import { useAuth } from "@/hooks/use-auth";
 
 export function Navbar() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [profile, setProfile] = useState<any>(null);
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
   const supabase = createClientComponentClient();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -32,63 +32,6 @@ export function Navbar() {
   const navContainerRef = useRef<HTMLDivElement>(null);
   const navContentRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-
-  useEffect(() => {
-    const getProfile = async () => {
-      try {
-        setIsLoading(true);
-
-        // Önce mevcut oturum bilgisini al
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session?.user) {
-          // Kullanıcı profil bilgilerini al
-          const { data: profile, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-
-          if (error) throw error;
-          setProfile(profile);
-        }
-      } catch (error) {
-        console.error("Error loading profile:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    // İlk yüklemede profili getir
-    getProfile();
-
-    // Auth state değişikliklerini dinle
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN") {
-        // Yeni oturum açıldığında profili güncelle
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session?.user.id)
-          .single();
-
-        setProfile(profile);
-        setIsLoading(false);
-      } else if (event === "SIGNED_OUT") {
-        setProfile(null);
-        setIsLoading(false);
-      }
-    });
-
-    // Cleanup subscription
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
 
   // Navbar entrance animation
   useEffect(() => {
@@ -216,7 +159,7 @@ export function Navbar() {
     try {
       console.log("Signing out...");
       await supabase.auth.signOut();
-      setProfile(null);
+      // useAuth hook will automatically handle profile state cleanup
       setTimeout(() => {
         router.refresh();
         router.push("/auth/login");
@@ -291,7 +234,7 @@ export function Navbar() {
 
             {/* Desktop Action Buttons */}
             <div className="hidden md:flex items-center space-x-3">
-              {isLoading ? (
+              {loading ? (
                 <div className="flex items-center space-x-4">
                   <Skeleton className="h-10 w-10 rounded-full" />
                 </div>
@@ -304,11 +247,11 @@ export function Navbar() {
                     >
                       <Avatar className="h-10 w-10">
                         <AvatarImage
-                          src={profile.avatar_url!}
+                          src={profile.avatar_url || ""}
                           alt={profile.username}
                         />
                         <AvatarFallback>
-                          {profile.username[0].toUpperCase()}
+                          {profile.username?.[0]?.toUpperCase() || "U"}
                         </AvatarFallback>
                       </Avatar>
                     </Button>
@@ -372,10 +315,8 @@ export function Navbar() {
               >
                 {isMenuOpen ? (
                   <X className="h-5 w-5" />
-                ) : !isLoading ? (
-                  <Menu className="h-5 w-5" />
                 ) : (
-                  <Skeleton className="h-5 w-5" />
+                  <Menu className="h-5 w-5" />
                 )}
               </Button>
             </div>
@@ -395,7 +336,7 @@ export function Navbar() {
                     {item.name}
                   </Link>
                 ))}
-                {isLoading ? (
+                {loading ? (
                   <div className="pt-3 space-y-2 border-t border-green-400/20">
                     <div className="flex items-center space-x-3 px-3 py-2">
                       <Skeleton className="h-10 w-10 rounded-full" />
@@ -415,11 +356,11 @@ export function Navbar() {
                     <div className="flex items-center space-x-3 px-3 py-2">
                       <Avatar className="h-10 w-10">
                         <AvatarImage
-                          src={profile.avatar_url!}
+                          src={profile.avatar_url || ""}
                           alt={profile.username}
                         />
                         <AvatarFallback>
-                          {profile.username[0].toUpperCase()}
+                          {profile.username?.[0]?.toUpperCase() || "U"}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -458,7 +399,7 @@ export function Navbar() {
                       Sign Out
                     </button>
                   </div>
-                ) : !isLoading ? (
+                ) : !loading ? (
                   <div className="pt-3 space-y-2">
                     <Link
                       href="/auth/login"

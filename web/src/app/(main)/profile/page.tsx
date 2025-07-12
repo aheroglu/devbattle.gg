@@ -33,6 +33,7 @@ import {
 import { Profile } from "@/types";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useToast } from "@/components/shared/ui/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Avatar,
   AvatarFallback,
@@ -41,52 +42,17 @@ import {
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, profile, loading } = useAuth();
   const supabase = createClientComponentClient();
   const router = useRouter();
   const { toast } = useToast();
 
-  // Fetch profile data
+  // Redirect if not authenticated
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setIsLoading(true);
-
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!session) {
-          router.push("/auth/login");
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
-        if (error) throw error;
-
-        if (data) {
-          setProfile(data);
-        }
-      } catch (error) {
-        console.error("Profile fetching error:", error);
-        toast({
-          title: "Hata",
-          description: "Profile information could not be retrieved.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProfile();
-  }, [supabase]);
+    if (!loading && !user) {
+      router.push("/auth/login");
+    }
+  }, [user, loading, router]);
 
   // Refs for animations
   const pageRef = useRef<HTMLDivElement>(null);
@@ -164,7 +130,7 @@ export default function ProfilePage() {
     }
   };
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen text-green-400 font-mono relative">
         <div className="relative z-10 py-28">
@@ -274,6 +240,21 @@ export default function ProfilePage() {
     );
   }
 
+  // Show message if no profile data
+  if (!loading && !profile) {
+    return (
+      <div className="min-h-screen text-green-400 font-mono relative flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Profile Not Found</h2>
+          <p className="text-gray-400 mb-6">Your profile information could not be loaded.</p>
+          <Button onClick={() => router.push("/auth/complete-profile")}>
+            Complete Profile Setup
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen text-green-400 font-mono relative">
       <div ref={pageRef} className="relative z-10 py-28">
@@ -322,7 +303,7 @@ export default function ProfilePage() {
                           alt={profile?.username ?? "User"}
                         />
                         <AvatarFallback>
-                          {profile?.username[0].toUpperCase()}
+                          {profile?.username?.[0]?.toUpperCase() || "U"}
                         </AvatarFallback>
                       </Avatar>
                     </div>
@@ -574,15 +555,17 @@ export default function ProfilePage() {
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-400 flex items-center">
-                        <Code className="h-4 w-4 mr-2" />
-                        Favorite Language
-                      </span>
-                      <span className="text-green-400">
-                        {profile?.preferred_languages[0]}
-                      </span>
-                    </div>
+                    {profile?.preferred_languages && profile?.preferred_languages.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400 flex items-center">
+                          <Code className="h-4 w-4 mr-2" />
+                          Favorite Language
+                        </span>
+                        <span className="text-green-400">
+                          {profile?.preferred_languages[0]}
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex items-center justify-between">
                       <span className="text-gray-400 flex items-center">

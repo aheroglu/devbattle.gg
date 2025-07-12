@@ -5,17 +5,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export type Profile = {
-  id: string;
-  username: string;
-  avatar_url?: string;
-  xp: number;
-  level: number;
-  battles_won: number;
-  battles_lost: number;
-  created_at: string;
-  updated_at: string;
-};
+// Profile type moved to types/index.ts for consistency
 
 export type Problem = {
   id: string;

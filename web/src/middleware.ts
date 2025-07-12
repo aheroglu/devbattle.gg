@@ -1,13 +1,30 @@
 import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
 import { NextRequest, NextResponse } from "next/server";
 
-const protectedRoutes = ["/profile", "/profile/[username]", "/settings", "/dashboard"];
+// Routes that require authentication
+const protectedRoutes = [
+  "/profile", // Personal profile page
+  "/settings", // Settings page
+  "/dashboard", // Dashboard
+  "/battle", // Battle pages /battle/[id]
+];
 
-const publicRoutes = [
+// Auth-related routes (redirected when logged in)
+const authRoutes = [
   "/auth/login",
-  "/auth/register",
-  "/auth/callback",
+  "/auth/register", 
+  "/auth/complete-profile",
   "/auth/forgot-password",
+];
+
+// Public routes accessible to everyone (logged in or not)
+const publicRoutes = [
+  "/", // Home page
+  "/battles", // Battle listing
+  "/tournaments", // Tournament listing
+  "/leaderboard", // Leaderboard
+  "/community", // Community
+  "/profile/", // Public profile pages /profile/[username]
 ];
 
 export async function middleware(req: NextRequest) {
@@ -20,18 +37,83 @@ export async function middleware(req: NextRequest) {
 
   const path = req.nextUrl.pathname;
 
-  // If user is not logged in and trying to access protected routes, redirect to login
-  if (protectedRoutes.some((route) => path.startsWith(route)) && !session) {
-    const redirectUrl = new URL("/auth/login", req.url);
-    redirectUrl.searchParams.set("redirect", path);
-    return NextResponse.redirect(redirectUrl);
+  // Skip middleware for static files, API routes, and auth callback
+  if (
+    path.startsWith("/_next") ||
+    path.startsWith("/api") ||
+    path.startsWith("/favicon.ico") ||
+    path.startsWith("/auth/callback") ||
+    path.includes(".")
+  ) {
+    return res;
   }
 
-  // If user is logged in and trying to access public routes, redirect to profile
-  if (session && publicRoutes.some((route) => path.startsWith(route))) {
-    return NextResponse.redirect(new URL("/profile", req.url));
+  // Helper function to check if route is public
+  const isPublicRoute = () => {
+    // Check exact public routes
+    if (publicRoutes.includes(path)) return true;
+    
+    // Check if it's a public profile page /profile/[username]
+    if (path.startsWith("/profile/") && path !== "/profile") return true;
+    
+    return false;
+  };
+
+  // Helper function to check if route is protected
+  const isProtectedRoute = () => {
+    return protectedRoutes.some((route) => {
+      // Exact match for /profile (personal profile)
+      if (route === "/profile" && path === "/profile") return true;
+      
+      // Prefix match for other routes like /battle/[id], /settings/*
+      if (route !== "/profile" && path.startsWith(route)) return true;
+      
+      return false;
+    });
+  };
+
+  // If user is not logged in
+  if (!session) {
+    // If trying to access protected routes, redirect to login
+    if (isProtectedRoute()) {
+      const redirectUrl = new URL("/auth/login", req.url);
+      redirectUrl.searchParams.set("redirect", path);
+      return NextResponse.redirect(redirectUrl);
+    }
+    
+    // Allow access to public routes and auth routes
+    if (isPublicRoute() || authRoutes.some(route => path.startsWith(route))) {
+      return res;
+    }
+    
+    // Default: allow access for undefined routes (will be handled by 404)
+    return res;
   }
 
+  // User is logged in
+  const profileCompleted = session.user.user_metadata?.profile_completed;
+
+  // If profile not completed
+  if (!profileCompleted) {
+    // Only allow access to complete-profile page and auth callback
+    if (!path.startsWith("/auth/complete-profile")) {
+      return NextResponse.redirect(new URL("/auth/complete-profile", req.url));
+    }
+    return res;
+  }
+
+  // Profile is completed
+  // If trying to access complete-profile page, redirect to home
+  if (path.startsWith("/auth/complete-profile")) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // If trying to access auth pages (login, register), redirect to home  
+  if (authRoutes.some((route) => path.startsWith(route) && !route.includes("complete-profile"))) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // Allow access to all other routes (public, protected, and undefined)
   return res;
 }
 

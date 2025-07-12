@@ -20,7 +20,14 @@ export default function AuthCallbackPage() {
           access_token: accessToken,
           refresh_token: refreshToken,
         });
-        router.push("/profile");
+        
+        // Check if user needs to complete profile
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && !user.user_metadata?.profile_completed) {
+          router.push("/auth/complete-profile");
+        } else {
+          router.push("/profile");
+        }
       } else if (accessToken && type === "recovery") {
         router.push("/auth/update-password");
       } else {

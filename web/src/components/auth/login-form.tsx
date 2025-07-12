@@ -161,6 +161,29 @@ export function LoginForm() {
     }
   };
 
+  const handleGithubSignIn = async () => {
+    try {
+      setIsLoading(true);
+      setAlert(null);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback?type=login`,
+          scopes: "read:user user:email",
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setAlert({
+        type: "error",
+        message: error.message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen text-green-400 font-mono relative overflow-hidden">
       <InteractiveBackground />
@@ -221,7 +244,10 @@ export function LoginForm() {
               )}
               {/* Social Login Buttons */}
               <div className="grid grid-cols-2 gap-3">
-                <Button className="form-element w-full bg-gray-900/50 hover:bg-gray-800/70 text-gray-300 hover:text-white border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 rounded-xl">
+                <Button 
+                  onClick={handleGithubSignIn}
+                  className="form-element w-full bg-gray-900/50 hover:bg-gray-800/70 text-gray-300 hover:text-white border border-gray-600/30 hover:border-gray-500/50 transition-all duration-300 rounded-xl"
+                >
                   <Github className="h-5 w-5 mr-2" />
                   GitHub
                 </Button>
