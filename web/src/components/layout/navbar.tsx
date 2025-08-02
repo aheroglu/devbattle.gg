@@ -20,7 +20,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/shared/ui/dropdown-menu";
-import { Profile } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
 
 export function Navbar() {

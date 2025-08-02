@@ -26,5 +26,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# markdown
-../rules.md
+# development files
+../@DEVELOPMENT_TODO.md
+../database-schema.sql

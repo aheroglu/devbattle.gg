@@ -33,8 +33,7 @@ export class BattleService {
         problem:problems(*),
         player1:profiles!battles_player1_id_fkey(*)
       `)
-      .eq('status', 'waiting')
-      .is('player2_id', null)
+      .in('status', ['open', 'waiting'])
       .order('created_at', { ascending: false })
       .limit(limit);
 
@@ -197,6 +196,74 @@ export class BattleService {
 
     if (error) throw error;
     return data || [];
+  }
+
+  // Join an existing battle
+  async joinBattle(battleId: string): Promise<boolean> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get current battle state
+    const { data: battle, error: fetchError } = await this.supabase
+      .from('battles')
+      .select('*')
+      .eq('id', battleId)
+      .single();
+
+    if (fetchError) throw fetchError;
+    if (!battle) throw new Error('Battle not found');
+
+    // Check if battle is joinable
+    if (battle.status !== 'open' && battle.status !== 'waiting') {
+      throw new Error('Battle is not available for joining');
+    }
+
+    // Check if user is already in this battle
+    if (battle.player1_id === user.id || battle.player2_id === user.id) {
+      return true; // Already joined
+    }
+
+    // Determine which slot to fill
+    let updateData: any = {};
+    if (!battle.player1_id) {
+      updateData.player1_id = user.id;
+      updateData.status = 'waiting'; // First player joined
+    } else if (!battle.player2_id) {
+      updateData.player2_id = user.id;
+      updateData.status = 'active'; // Second player joined, battle starts
+      updateData.started_at = new Date().toISOString();
+    } else {
+      throw new Error('Battle is full');
+    }
+
+    // Update the battle
+    const { error: updateError } = await this.supabase
+      .from('battles')
+      .update(updateData)
+      .eq('id', battleId);
+
+    if (updateError) throw updateError;
+    return true;
+  }
+
+  // Get battle details by ID
+  async getBattleById(battleId: string): Promise<Battle | null> {
+    const { data, error } = await this.supabase
+      .from('battles')
+      .select(`
+        *,
+        problem:problems(*),
+        player1:profiles!battles_player1_id_fkey(*),
+        player2:profiles!battles_player2_id_fkey(*)
+      `)
+      .eq('id', battleId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // Not found
+      throw error;
+    }
+    return data;
   }
 
   // Quick match - find or create a battle

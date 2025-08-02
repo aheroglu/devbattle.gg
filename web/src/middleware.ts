@@ -12,7 +12,7 @@ const protectedRoutes = [
 // Auth-related routes (redirected when logged in)
 const authRoutes = [
   "/auth/login",
-  "/auth/register", 
+  "/auth/register",
   "/auth/complete-profile",
   "/auth/forgot-password",
 ];
@@ -52,10 +52,10 @@ export async function middleware(req: NextRequest) {
   const isPublicRoute = () => {
     // Check exact public routes
     if (publicRoutes.includes(path)) return true;
-    
+
     // Check if it's a public profile page /profile/[username]
     if (path.startsWith("/profile/") && path !== "/profile") return true;
-    
+
     return false;
   };
 
@@ -64,29 +64,39 @@ export async function middleware(req: NextRequest) {
     return protectedRoutes.some((route) => {
       // Exact match for /profile (personal profile)
       if (route === "/profile" && path === "/profile") return true;
-      
+
       // Prefix match for other routes like /battle/[id], /settings/*
       if (route !== "/profile" && path.startsWith(route)) return true;
-      
+
       return false;
     });
   };
 
-  // If user is not logged in
+  // Helper function to check if route is auth-related
+  const isAuthRoute = () => {
+    return authRoutes.some((route) => path.startsWith(route));
+  };
+
+  // Public routes are ALWAYS accessible - highest priority
+  if (isPublicRoute()) {
+    return res;
+  }
+
+  // No session (user not logged in)
   if (!session) {
-    // If trying to access protected routes, redirect to login
+    // Redirect protected routes to login
     if (isProtectedRoute()) {
       const redirectUrl = new URL("/auth/login", req.url);
       redirectUrl.searchParams.set("redirect", path);
       return NextResponse.redirect(redirectUrl);
     }
-    
-    // Allow access to public routes and auth routes
-    if (isPublicRoute() || authRoutes.some(route => path.startsWith(route))) {
+
+    // Allow auth routes for non-logged-in users
+    if (isAuthRoute()) {
       return res;
     }
-    
-    // Default: allow access for undefined routes (will be handled by 404)
+
+    // Allow access to undefined routes (will be handled by 404)
     return res;
   }
 
@@ -95,25 +105,21 @@ export async function middleware(req: NextRequest) {
 
   // If profile not completed
   if (!profileCompleted) {
-    // Only allow access to complete-profile page and auth callback
-    if (!path.startsWith("/auth/complete-profile")) {
-      return NextResponse.redirect(new URL("/auth/complete-profile", req.url));
+    // Only allow access to complete-profile page
+    if (path.startsWith("/auth/complete-profile")) {
+      return res;
     }
-    return res;
+
+    // Redirect all other pages to complete-profile
+    return NextResponse.redirect(new URL("/auth/complete-profile", req.url));
   }
 
-  // Profile is completed
-  // If trying to access complete-profile page, redirect to home
-  if (path.startsWith("/auth/complete-profile")) {
+  // Profile is completed - redirect away from auth pages
+  if (isAuthRoute()) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // If trying to access auth pages (login, register), redirect to home  
-  if (authRoutes.some((route) => path.startsWith(route) && !route.includes("complete-profile"))) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  // Allow access to all other routes (public, protected, and undefined)
+  // Allow access to all other routes
   return res;
 }
 
