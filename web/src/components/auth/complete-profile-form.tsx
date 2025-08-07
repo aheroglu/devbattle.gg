@@ -53,14 +53,9 @@ export default function CompleteProfileForm({
 
   // Extract user info from OAuth providers (Google, GitHub)
   const fullName =
-    user.user_metadata.full_name || 
-    user.user_metadata.name || 
-    user.user_metadata.user_name || 
-    "";
+    user.user_metadata.full_name || user.user_metadata.name || "";
   const avatarUrl =
-    user.user_metadata.avatar_url || 
-    user.user_metadata.picture || 
-    "";
+    user.user_metadata.avatar_url || user.user_metadata.picture || "";
 
   const [formData, setFormData] = useState({
     // Step 1 - Username (full name is already from OAuth providers)
@@ -157,13 +152,13 @@ export default function CompleteProfileForm({
           : 3;
 
       // Extract GitHub URL if user signed up with GitHub
-      const githubUrl = user.user_metadata.user_name 
-        ? `https://github.com/${user.user_metadata.user_name}`
+      const githubUrl = user.user_metadata.full_name
+        ? `https://github.com/${user.user_metadata.full_name}`
         : null;
 
-      // Update profiles table
+      // Update users table
       const { error: profileError } = await supabase
-        .from("profiles")
+        .from("users")
         .update({
           username: formData.username,
           full_name: fullName,

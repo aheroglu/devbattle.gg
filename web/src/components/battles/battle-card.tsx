@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Button } from "@/components/shared/ui/button";
 import {
   Card,
@@ -7,14 +6,15 @@ import {
   CardTitle,
 } from "@/components/shared/ui/card";
 import { Badge } from "@/components/shared/ui/badge";
-import { Code, Users, Clock, Trophy, Play, Eye } from "lucide-react";
+import { Code, Users, Clock, Trophy, Play } from "lucide-react";
 import { BattleSession } from "@/types";
 
 interface BattleCardProps {
   battle: BattleSession;
+  onJoinClick: (battle: BattleSession) => void;
 }
 
-export function BattleCard({ battle }: BattleCardProps) {
+export function BattleCard({ battle, onJoinClick }: BattleCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "live":
@@ -114,12 +114,13 @@ export function BattleCard({ battle }: BattleCardProps) {
 
         {/* Action Buttons */}
         <div className="flex gap-2 pt-2">
-          <Link href={`/battle/${battle.id}`} className="flex-1">
-            <Button className="w-full bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-400/30 hover:border-green-400 transition-all duration-300 rounded-xl">
-              <Play className="h-4 w-4 mr-2" />
-              Join Battle
-            </Button>
-          </Link>
+          <Button 
+            onClick={() => onJoinClick(battle)}
+            className="w-full bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-400/30 hover:border-green-400 transition-all duration-300 rounded-xl"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Join Battle
+          </Button>
         </div>
       </CardContent>
     </Card>

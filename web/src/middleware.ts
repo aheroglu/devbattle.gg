@@ -6,7 +6,6 @@ const protectedRoutes = [
   "/profile", // Personal profile page
   "/settings", // Settings page
   "/dashboard", // Dashboard
-  "/battle", // Battle pages /battle/[id]
 ];
 
 // Auth-related routes (redirected when logged in)
@@ -100,11 +99,22 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  // User is logged in
-  const profileCompleted = session.user.user_metadata?.profile_completed;
+  // Check if profile exists in database
+  const { data: profile } = await supabase
+    .from("users")
+    .select("title, preferred_languages")
+    .eq("id", session.user.id)
+    .single();
+
+  // Check if profile is incomplete (no title or preferred_languages)
+  const isProfileIncomplete =
+    !profile ||
+    !profile.title ||
+    !profile.preferred_languages ||
+    profile.preferred_languages.length === 0;
 
   // If profile not completed
-  if (!profileCompleted) {
+  if (isProfileIncomplete) {
     // Only allow access to complete-profile page
     if (path.startsWith("/auth/complete-profile")) {
       return res;

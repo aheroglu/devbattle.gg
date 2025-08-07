@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/shared/ui/button";
 import { Zap, Search, ArrowLeft } from "lucide-react";
 import { BattleCard } from "@/components/battles/battle-card";
+import { BattleJoinModal } from "@/components/battles/battle-join-modal";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { BattleSession, DifficultyLevel, SessionType } from "@/types";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,8 @@ export default function BattleList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [battles, setBattles] = useState<BattleSession[]>([]);
   const [filteredBattles, setFilteredBattles] = useState<BattleSession[]>([]);
+  const [selectedBattle, setSelectedBattle] = useState<BattleSession | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const router = useRouter();
 
@@ -122,6 +125,16 @@ export default function BattleList() {
 
     setFilteredBattles(filtered);
   }, [battles, searchTerm, difficultyFilter, typeFilter]);
+
+  const handleJoinClick = (battle: BattleSession) => {
+    setSelectedBattle(battle);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedBattle(null);
+  };
 
   // GSAP animations
   useEffect(() => {
@@ -347,7 +360,11 @@ export default function BattleList() {
               </div>
             ) : (
               filteredBattles.map((battle) => (
-                <BattleCard key={battle.id} battle={battle} />
+                <BattleCard 
+                  key={battle.id} 
+                  battle={battle} 
+                  onJoinClick={handleJoinClick}
+                />
               ))
             )}
           </div>
@@ -364,6 +381,13 @@ export default function BattleList() {
           </div>
         </div>
       </div>
+
+      {/* Battle Join Modal */}
+      <BattleJoinModal
+        battle={selectedBattle}
+        open={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   );
 }

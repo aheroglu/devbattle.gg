@@ -13,25 +13,72 @@ export async function GET(request: Request) {
 
     if (!error) {
       // Get the current user to check if profile needs completion
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (user) {
-        // Check if this is a new user (first time signing in with OAuth)
-        const isNewUser = !user.user_metadata?.profile_completed;
-        
-        // For both signup and new OAuth users, redirect to complete profile
-        if ((type === "signup" || isNewUser) && !user.user_metadata?.profile_completed) {
+        // Check if profile exists in database, if not create it
+        let { data: profile, error: profileError } = await supabase
+          .from("users")
+          .select("title, preferred_languages")
+          .eq("id", user.id)
+          .single();
+
+        // If user doesn't exist in users table, create it from user_metadata
+        if (profileError && profileError.code === 'PGRST116') {
+          const { data: newProfile, error: insertError } = await supabase
+            .from("users")
+            .insert({
+              id: user.id,
+              username: user.user_metadata?.username || user.email?.split('@')[0] || 'user',
+              avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+              xp: 0,
+              level: user.user_metadata?.level || 1,
+              battles_won: 0,
+              battles_lost: 0,
+              rank: null,
+              title: user.user_metadata?.title || null,
+              badge: null,
+              win_rate: 0,
+              preferred_languages: user.user_metadata?.preferred_languages || null,
+              full_name: user.user_metadata?.full_name || null,
+              website: null,
+              github_url: null,
+              twitter_url: null,
+              bio: null,
+              location: null,
+              role: 'developer',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              lastActive: new Date()
+            })
+            .select("title, preferred_languages")
+            .single();
+
+          if (!insertError) {
+            profile = newProfile;
+          }
+        }
+
+        // Check if profile is incomplete (no title or preferred_languages)
+        const isProfileIncomplete =
+          !profile ||
+          !profile.title ||
+          !profile.preferred_languages ||
+          profile.preferred_languages.length === 0;
+
+        // For signup confirmations or incomplete profiles, redirect to complete profile
+        if (type === "signup" || isProfileIncomplete) {
           const response = NextResponse.redirect(
             new URL("/auth/complete-profile", requestUrl.origin)
           );
           response.headers.set("Cache-Control", "no-store, max-age=0");
           return response;
         }
-        
+
         // For existing users with completed profiles, redirect to home
-        const response = NextResponse.redirect(
-          new URL("/", requestUrl.origin)
-        );
+        const response = NextResponse.redirect(new URL("/", requestUrl.origin));
         response.headers.set("Cache-Control", "no-store, max-age=0");
         return response;
       }
