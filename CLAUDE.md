@@ -1,150 +1,84 @@
-# DevBattle.gg Development Guidelines
+# CLAUDE.md
 
-## Project Overview
-DevBattle.gg is a real-time coding battle platform built with Next.js 14, TypeScript, Supabase, and Tailwind CSS. Users can join coding battles, compete in real-time, and track their progress.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Workflow
+## Commands
 
-### Commit & Push Strategy
-**IMPORTANT**: After every significant change or feature implementation, always commit and push changes immediately. This ensures:
-- Better version control and progress tracking
-- Safer development with frequent backups
-- Clear history of feature development
-- Easy rollback if needed
-
-### Commit Guidelines
-1. Use descriptive commit messages following the format:
-   - `feat:` for new features
-   - `fix:` for bug fixes
-   - `enhance:` for improvements to existing features
-   - `refactor:` for code restructuring
-   - `style:` for UI/styling changes
-
-2. Always include the Claude Code footer in commits:
-   ```
-   > Generated with [Claude Code](https://claude.ai/code)
-   
-   Co-Authored-By: Claude <noreply@anthropic.com>
-   ```
-
-## Technology Stack
-
-### Frontend
-- **Framework**: Next.js 14 with App Router
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS with custom cyberpunk theme
-- **Components**: Radix UI primitives
-- **Editor**: Monaco Editor for code editing
-- **Animations**: GSAP for advanced animations
-
-### Backend & Database
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth
-- **Real-time**: Supabase Realtime subscriptions
-- **Storage**: Supabase Storage
-
-### Key Dependencies
-- `nextjs-toploader`: Page transition loading indicators
-- `next-themes`: Dark/light theme management
-- `react-hook-form`: Form handling
-- `zod`: Schema validation
-
-## Project Structure
-
-### Important Files
-- `/web/src/app/`: Next.js app router pages
-- `/web/src/components/`: Reusable components
-- `/web/src/types/index.ts`: TypeScript type definitions
-- `/web/src/app/globals.css`: Global styles and theme
-- `/web/public/`: Static assets including custom cursor
-
-### Database Tables
-- `users`: User profiles and information
-- `battle_sessions`: Battle configuration and metadata
-- `battle_participants`: Active participants in battles
-- `user_submissions`: Code submissions and results
-
-## Development Guidelines
-
-### Authentication Flow
-1. Users authenticate via Supabase Auth (email/password or OAuth)
-2. Middleware checks authentication status and profile completion
-3. Incomplete profiles redirect to `/complete-profile`
-4. Complete profiles access protected routes
-
-### Realtime Features
-- Battle participant tracking with Supabase subscriptions
-- Live updates for battle status changes
-- Real-time progress tracking during battles
-- Automatic cleanup on participant leave/timeout
-
-### Battle System
-- Battles have configurable duration (max_duration in seconds)
-- Automatic timeout handling removes participants and redirects
-- Progress bars show time elapsed vs total duration
-- Modal-based joining system with authentication checks
-
-### Styling Conventions
-- Cyberpunk theme with green/blue accents
-- Custom cursor using `custom-cursor-32x32.png`
-- Custom scrollbars with green glow effects
-- Responsive design with mobile-first approach
-
-## Testing & Quality
-
-### Commands to Run After Changes
+### Development
 ```bash
-# Type checking (if available)
-npm run typecheck
-
-# Linting (if available)
-npm run lint
-
-# Build verification
-npm run build
-
-# Development server
-npm run dev
+cd web
+npm run dev    # Start development server
+npm run build  # Build for production
+npm run lint   # Run ESLint
 ```
 
-### Code Quality
-- Always use TypeScript for type safety
-- Follow existing code conventions and patterns
-- Implement error handling for async operations
-- Use proper loading states for async UI updates
+### Commit & Push Strategy
+After every significant change or feature implementation, always commit and push changes immediately using:
+```bash
+git add .
+git commit -m "feat: description"
+git push origin main
+```
 
-## Security Considerations
-- Never expose sensitive data in client-side code
-- Use Supabase RLS (Row Level Security) policies
-- Validate user inputs on both client and server
-- Implement proper authentication checks in middleware
+Include this footer in all commits:
+```
+🤖 Generated with [Claude Code](https://claude.ai/code)
 
-## Performance Optimization
-- Use dynamic imports for heavy components (Monaco Editor)
-- Implement proper loading states
-- Optimize realtime subscriptions to prevent memory leaks
-- Use memoization for expensive calculations
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
 
-## Deployment
-- The project is set up for deployment on Vercel/similar platforms
-- Environment variables should be configured in deployment environment
-- Database migrations should be applied via Supabase dashboard
+## Architecture
 
-## Development Notes
-- Always test realtime features with multiple browser sessions
-- Verify authentication flows work correctly
-- Test battle timeout functionality with short durations
-- Ensure responsive design works on mobile devices
+### Next.js App Router Structure
+- Uses Next.js 14 App Router with TypeScript
+- Main application pages in `web/src/app/(main)/` route group
+- Authentication pages in `web/src/app/auth/`
+- Battle pages at `web/src/app/battle/[id]/`
 
-## Recent Features Implemented
-1.  Battle timeout system with automatic participant removal
-2.  Custom cursor implementation
-3.  NextJS TopLoader for page transitions  
-4.  Realtime participant tracking in battle cards
-5.  Modal-based battle joining system
-6.  Leave battle confirmation dialogs
-7.  Timer-based progress bars for live battles
+### Middleware Authentication Flow
+The `web/src/middleware.ts` implements a three-tier route system:
+1. **Public routes** (always accessible): `/`, `/battles`, `/tournaments`, `/leaderboard`
+2. **Protected routes** (require auth): `/profile`, `/settings`, `/dashboard`
+3. **Auth routes** (redirect when logged in): `/auth/login`, `/auth/register`
 
----
+Key logic:
+- Checks Supabase session for authentication
+- Validates profile completion by querying `users` table for `title` and `preferred_languages`
+- Redirects incomplete profiles to `/auth/complete-profile`
 
-**Remember**: Always commit and push after implementing each feature or significant change!
+### Database Schema (Supabase)
+Core tables from `web/src/types/index.ts`:
+- `users`: Profile data including `title`, `preferred_languages`, XP, level
+- `battle_sessions`: Battle metadata with `max_duration`, `difficulty`, `language`
+- `battle_participants`: Links users to battles, tracks `result` (PENDING/SUCCESS/FAILURE)
+- `battle_submissions`: Stores code submissions with Monaco Editor content
+
+### Realtime System Architecture
+Battle system uses Supabase realtime subscriptions for:
+- Participant count tracking in battle cards
+- Live battle status updates (Join/Watch Live)
+- Automatic timeout handling when `max_duration` expires
+
+Key pattern in components:
+```typescript
+const channel = supabase
+  .channel(`battle-${battleId}`)
+  .on('postgres_changes', {
+    event: '*',
+    schema: 'public', 
+    table: 'battle_participants',
+    filter: `battle_id=eq.${battleId}`
+  }, handleChange)
+  .subscribe();
+```
+
+### Battle Flow Architecture
+1. **Battle Cards** (`web/src/components/battles/battle-card.tsx`): Show realtime participant counts, switch between "Join Battle" and "Watch Live"
+2. **Join Modal** (`web/src/components/battles/battle-join-modal.tsx`): Authentication check and participant insertion
+3. **Battle Page** (`web/src/app/battle/[id]/page.tsx`): Monaco Editor integration, timeout system, leave functionality
+
+### Styling System
+- Cyberpunk theme with CSS custom properties in `web/src/app/globals.css`
+- Custom cursor via `cursor: url('/custom-cursor-32x32.png')`
+- Radix UI components with Tailwind CSS styling
+- GSAP animations loaded dynamically
