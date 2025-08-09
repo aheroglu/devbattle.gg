@@ -2,6 +2,7 @@ export type UserRole = "admin" | "developer";
 export type DifficultyLevel = "EASY" | "MEDIUM" | "HARD";
 export type SessionType = "SOLO" | "DUO";
 export type BattleResult = "PENDING" | "SUCCESS" | "FAILURE";
+export type ParticipantRole = "SOLVER" | "SPECTATOR";
 
 export interface User {
   id: string;
@@ -59,6 +60,7 @@ export interface BattleParticipant {
   result: BattleResult;
   xp_earned: number;
   created_at: Date;
+  role: ParticipantRole;
 }
 
 export interface BattleSubmission {

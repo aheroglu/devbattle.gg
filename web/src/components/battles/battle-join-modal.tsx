@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/shared/ui/button";
 import {
   Dialog,
@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/shared/ui/dialog";
 import { Badge } from "@/components/shared/ui/badge";
-import { Users, Trophy, Clock, Play, X, Code, User } from "lucide-react";
+import { Users, Trophy, Clock, Play, X, Code, User, Eye } from "lucide-react";
 import { BattleSession } from "@/types";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter } from "next/navigation";
@@ -26,8 +26,32 @@ export function BattleJoinModal({
   onClose,
 }: BattleJoinModalProps) {
   const [isJoining, setIsJoining] = useState(false);
+  const [battleIsLive, setBattleIsLive] = useState(false);
   const supabase = createClientComponentClient();
   const router = useRouter();
+
+  // Check if battle is live when modal opens
+  useEffect(() => {
+    const checkBattleStatus = async () => {
+      if (!battle || !open) return;
+      
+      try {
+        const { data: solverExists } = await supabase
+          .from("battle_participants")
+          .select("id")
+          .eq("battle_id", battle.id)
+          .eq("role", "SOLVER")
+          .single();
+          
+        setBattleIsLive(!!solverExists);
+      } catch (error) {
+        console.error("Error checking battle status:", error);
+        setBattleIsLive(false);
+      }
+    };
+    
+    checkBattleStatus();
+  }, [battle, open, supabase]);
 
   if (!battle) return null;
 
@@ -62,14 +86,28 @@ export function BattleJoinModal({
       // Check if user is already a participant
       const { data: existingParticipant } = await supabase
         .from("battle_participants")
-        .select("id")
+        .select("id, role")
         .eq("battle_id", battle.id)
         .eq("user_id", session.user.id)
         .single();
 
-      // If not already a participant, add them
+      // If not already a participant, determine their role and add them
       if (!existingParticipant) {
-        console.log("User is not a participant");
+        console.log("User is not a participant, determining role...");
+        
+        // Check if there's already a SOLVER in this battle
+        const { data: existingSolver } = await supabase
+          .from("battle_participants")
+          .select("id, role")
+          .eq("battle_id", battle.id)
+          .eq("role", "SOLVER")
+          .single();
+
+        // Determine user role: SOLVER if no solver exists, SPECTATOR otherwise
+        const userRole = existingSolver ? "SPECTATOR" : "SOLVER";
+        
+        console.log(`Assigning role: ${userRole} (existing solver: ${!!existingSolver})`);
+
         const { error: participantError } = await supabase
           .from("battle_participants")
           .insert({
@@ -78,6 +116,7 @@ export function BattleJoinModal({
             result: "PENDING",
             xp_earned: 0,
             submitted_at: null,
+            role: userRole,
           });
 
         if (participantError) {
@@ -200,10 +239,19 @@ export function BattleJoinModal({
                 </>
               ) : (
                 <>
-                  <Play className="w-5 h-5 mr-2" />
-                  {battle.session_type === "SOLO"
-                    ? "Start Challenge"
-                    : "Join Battle"}
+                  {battleIsLive ? (
+                    <>
+                      <Eye className="w-5 h-5 mr-2" />
+                      Watch Live
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5 mr-2" />
+                      {battle.session_type === "SOLO"
+                        ? "Start Challenge"
+                        : "Join Battle"}
+                    </>
+                  )}
                 </>
               )}
             </Button>
