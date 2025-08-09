@@ -34,6 +34,7 @@ import { BattleSession, ParticipantRole } from "@/types";
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -58,10 +59,12 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const [participantCount, setParticipantCount] = useState(0);
   const [isParticipant, setIsParticipant] = useState(false);
   const [userRole, setUserRole] = useState<ParticipantRole | null>(null);
+  const [battleStartTime, setBattleStartTime] = useState<Date | null>(null);
 
   // Battle arena states
   const [timeLeft, setTimeLeft] = useState(0); // seconds
   const [code, setCode] = useState("// Loading...");
+  const [initialCodeSet, setInitialCodeSet] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
   const [participants, setParticipants] = useState<any[]>([]);
@@ -84,8 +87,16 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
 
         setBattle(data);
         setLanguage(data.language);
-        setTimeLeft(data.max_duration); // max_duration is already in seconds
-        setCode(`// ${data.title} Challenge\n// Start coding here...\n\n`);
+        
+        // Try to load saved code from localStorage first
+        const savedCode = localStorage.getItem(`battle-code-${id}`);
+        if (savedCode) {
+          setCode(savedCode);
+          console.log("Loaded saved code from localStorage");
+        } else {
+          setCode(`// ${data.title} Challenge\n// Start coding here...\n\n`);
+        }
+        setInitialCodeSet(true);
 
         // Fetch participants with user data
         const { data: participantData, error: participantError } =
@@ -110,16 +121,33 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
         if (!participantError && participantData) {
           setParticipantCount(participantData.length);
 
+          // Find SOLVER participant to determine battle start time
+          const solverParticipant = participantData.find((p: any) => p.role === "SOLVER");
+          if (solverParticipant) {
+            const startTime = new Date(solverParticipant.created_at);
+            setBattleStartTime(startTime);
+            console.log("Battle started at:", startTime);
+            
+            // Calculate real remaining time
+            const now = new Date();
+            const elapsedSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+            const remainingTime = Math.max(0, data.max_duration - elapsedSeconds);
+            setTimeLeft(remainingTime);
+            console.log(`Elapsed: ${elapsedSeconds}s, Remaining: ${remainingTime}s`);
+          } else {
+            // No solver yet, use full duration
+            setTimeLeft(data.max_duration);
+          }
+
           // Transform data for display
           const transformedParticipants = participantData.map(
             (p: any, index: number) => ({
               id: p.id,
               name: `@${p.users.username}`,
-              progress: Math.floor(Math.random() * 100), // Mock progress for now
               rank: index + 1,
-              avatar: p.users.avatar_url ? "👤" : "🥷", // Mock avatar
+              avatar: p.users.avatar_url,
               title: p.users.title || "Developer",
-              result: p.result,
+              role: p.role,
             })
           );
 
@@ -211,15 +239,28 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           if (!participantError && participantData) {
             setParticipantCount(participantData.length);
 
+            // Update battle start time if needed
+            const solverParticipant = participantData.find((p: any) => p.role === "SOLVER");
+            if (solverParticipant && !battleStartTime) {
+              const startTime = new Date(solverParticipant.created_at);
+              setBattleStartTime(startTime);
+              console.log("Battle started at (realtime update):", startTime);
+              
+              // Calculate real remaining time
+              const now = new Date();
+              const elapsedSeconds = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+              const remainingTime = Math.max(0, battle.max_duration - elapsedSeconds);
+              setTimeLeft(remainingTime);
+            }
+
             const transformedParticipants = participantData.map(
               (p: any, index: number) => ({
                 id: p.id,
                 name: `@${p.users.username}`,
-                progress: Math.floor(Math.random() * 100),
                 rank: index + 1,
-                avatar: p.users.avatar_url ? "👤" : "🥷",
+                avatar: p.users.avatar_url,
                 title: p.users.title || "Developer",
-                result: p.result,
+                role: p.role,
               })
             );
 
@@ -240,18 +281,44 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
+      if (battleStartTime && battle) {
+        // Calculate time left based on actual elapsed time
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now.getTime() - battleStartTime.getTime()) / 1000);
+        const remainingTime = Math.max(0, battle.max_duration - elapsedSeconds);
+        
+        setTimeLeft(remainingTime);
+        
+        if (remainingTime <= 0) {
           // Time's up! Handle timeout
           handleBattleTimeout();
-          return 0;
         }
-        return prev - 1;
-      });
+      } else {
+        // Fallback to simple countdown if no battleStartTime
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            handleBattleTimeout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [battleStartTime, battle]);
+
+  // Auto-save code to localStorage
+  useEffect(() => {
+    if (initialCodeSet && battle) {
+      const saveTimer = setTimeout(() => {
+        localStorage.setItem(`battle-code-${id}`, code);
+        console.log("Code auto-saved to localStorage");
+      }, 1000); // Save after 1 second of no typing
+
+      return () => clearTimeout(saveTimer);
+    }
+  }, [code, id, initialCodeSet, battle]);
 
   useEffect(() => {
     const loadGSAP = async () => {
@@ -307,7 +374,9 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
         return;
       }
 
-      // Redirect to battles page
+      // Clear saved code and redirect to battles page
+      localStorage.removeItem(`battle-code-${id}`);
+      console.log("Cleared saved code from localStorage");
       router.push("/battles");
     } catch (error) {
       console.error("Error leaving battle:", error);
@@ -335,7 +404,9 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
         console.error("Error removing participant on timeout:", error);
       }
 
-      // Redirect to battles page after timeout
+      // Clear saved code and redirect to battles page after timeout
+      localStorage.removeItem(`battle-code-${id}`);
+      console.log("Cleared saved code from localStorage (timeout)");
       setTimeout(() => {
         router.push("/battles");
       }, 1000); // Small delay to show timeout state
@@ -512,7 +583,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
             <CardHeader>
               <CardTitle className="text-green-400 text-lg flex items-center">
                 <Users className="h-5 w-5 mr-2" />
-                Participants ({participantCount}/50)
+                Participants ({participantCount}/20)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -523,25 +594,25 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
                     className="flex items-center justify-between p-2 bg-black/30 rounded-lg"
                   >
                     <div className="flex items-center space-x-3">
-                      <span className="text-lg">{participant.avatar}</span>
+                      <span className="text-lg">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage
+                            className="rounded-full h-10 w-10"
+                            src={participant.avatar || ""}
+                            alt={participant.name}
+                          />
+                          <AvatarFallback>
+                            {participant.name?.[0]?.toUpperCase() || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                      </span>
                       <div>
                         <div className="text-blue-400 text-sm font-semibold">
                           {participant.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {participant.title} • {participant.result}
+                          {participant.title}
                         </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-green-400 text-sm font-bold">
-                        {participant.progress}%
-                      </div>
-                      <div className="w-16 bg-gray-700 rounded-full h-1 mt-1">
-                        <div
-                          className="h-full bg-gradient-to-r from-green-400 to-blue-400 rounded-full transition-all duration-1000"
-                          style={{ width: `${participant.progress}%` }}
-                        ></div>
                       </div>
                     </div>
                   </div>
