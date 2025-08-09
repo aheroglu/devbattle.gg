@@ -30,7 +30,7 @@ import {
   Clock,
 } from "lucide-react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { BattleSession } from "@/types";
+import { BattleSession, ParticipantRole } from "@/types";
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -57,6 +57,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const [error, setError] = useState<string | null>(null);
   const [participantCount, setParticipantCount] = useState(0);
   const [isParticipant, setIsParticipant] = useState(false);
+  const [userRole, setUserRole] = useState<ParticipantRole | null>(null);
 
   // Battle arena states
   const [timeLeft, setTimeLeft] = useState(0); // seconds
@@ -95,6 +96,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
             id,
             user_id,
             result,
+            role,
             created_at,
             users!inner(
               username,
@@ -124,19 +126,23 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           setParticipants(transformedParticipants);
         }
 
-        // Check if current user is a participant (will be checked in auth effect)
+        // Check if current user is a participant and get their role
         const {
           data: { session },
         } = await supabase.auth.getSession();
         if (session) {
           const { data: userParticipant } = await supabase
             .from("battle_participants")
-            .select("id")
+            .select("id, role")
             .eq("battle_id", id)
             .eq("user_id", session.user.id)
             .single();
 
           setIsParticipant(!!userParticipant);
+          if (userParticipant) {
+            setUserRole(userParticipant.role);
+            console.log("User role:", userParticipant.role);
+          }
         }
       } catch (err) {
         setError("Failed to load battle");
@@ -191,6 +197,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
               id,
               user_id,
               result,
+              role,
               created_at,
               users!inner(
                 username,
@@ -419,6 +426,14 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
             </div>
 
             <div className="flex items-center space-x-4">
+              {userRole && (
+                <div className="text-center">
+                  <div className="text-sm font-bold text-blue-400">
+                    {userRole}
+                  </div>
+                  <div className="text-xs text-gray-400">Role</div>
+                </div>
+              )}
               <div className="text-center">
                 <div className="text-4xl font-bold text-green-400">
                   {formatTime(timeLeft)}
@@ -540,7 +555,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           </Card>
         </div>
 
-        {/* Center Panel - Code Editor */}
+        {/* Center Panel - Code Editor (Expands to full width when chat is hidden for SOLVER) */}
         <div className="flex-1 flex flex-col">
           {/* Editor Header */}
           <div className="border-b border-green-400/30 bg-black/50 backdrop-blur-sm p-4">
@@ -708,69 +723,71 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           </div>
         </div>
 
-        {/* Right Panel - Chat */}
-        <div className="w-80 border-l border-green-400/30 bg-black/50 backdrop-blur-sm flex flex-col">
-          <div className="p-4 border-b border-green-400/30">
-            <h3 className="text-green-400 font-semibold flex items-center">
-              <MessageCircle className="h-4 w-4 mr-2" />
-              Battle Chat
-            </h3>
-          </div>
+        {/* Right Panel - Chat (Only visible for SPECTATOR users) */}
+        {userRole === "SPECTATOR" && (
+          <div className="w-80 border-l border-green-400/30 bg-black/50 backdrop-blur-sm flex flex-col">
+            <div className="p-4 border-b border-green-400/30">
+              <h3 className="text-green-400 font-semibold flex items-center">
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Battle Chat
+              </h3>
+            </div>
 
-          <div ref={chatRef} className="flex-1 p-4 overflow-y-auto space-y-3">
-            {[
-              {
-                user: "@codeNinja_42",
-                message: "This problem looks tricky!",
-                time: "2m ago",
-                avatar: "🥷",
-              },
-              {
-                user: "@pythonMaster",
-                message: "Hash map approach should work",
-                time: "1m ago",
-                avatar: "🐍",
-              },
-              {
-                user: "@reactGuru",
-                message: "Anyone else getting TLE?",
-                time: "30s ago",
-                avatar: "⚛️",
-              },
-            ].map((chat, i) => (
-              <div key={i} className="flex items-start space-x-2">
-                <span className="text-sm">{chat.avatar}</span>
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-blue-400 text-xs font-semibold">
-                      {chat.user}
-                    </span>
-                    <span className="text-gray-500 text-xs">{chat.time}</span>
+            <div ref={chatRef} className="flex-1 p-4 overflow-y-auto space-y-3">
+              {[
+                {
+                  user: "@codeNinja_42",
+                  message: "This problem looks tricky!",
+                  time: "2m ago",
+                  avatar: "🥷",
+                },
+                {
+                  user: "@pythonMaster",
+                  message: "Hash map approach should work",
+                  time: "1m ago",
+                  avatar: "🐍",
+                },
+                {
+                  user: "@reactGuru",
+                  message: "Anyone else getting TLE?",
+                  time: "30s ago",
+                  avatar: "⚛️",
+                },
+              ].map((chat, i) => (
+                <div key={i} className="flex items-start space-x-2">
+                  <span className="text-sm">{chat.avatar}</span>
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-blue-400 text-xs font-semibold">
+                        {chat.user}
+                      </span>
+                      <span className="text-gray-500 text-xs">{chat.time}</span>
+                    </div>
+                    <p className="text-gray-300 text-sm">{chat.message}</p>
                   </div>
-                  <p className="text-gray-300 text-sm">{chat.message}</p>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div className="p-4 border-t border-green-400/30">
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 px-3 py-2 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300 text-sm"
-              />
-              <Button
-                size="sm"
-                className="bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-400/30 hover:border-green-400 transition-all duration-300 rounded-xl"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+            <div className="p-4 border-t border-green-400/30">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 px-3 py-2 bg-gray-900/50 border border-green-400/20 rounded-xl text-gray-300 placeholder-gray-500 focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300 text-sm"
+                />
+                <Button
+                  size="sm"
+                  className="bg-green-500/20 hover:bg-green-500/40 text-green-400 border border-green-400/30 hover:border-green-400 transition-all duration-300 rounded-xl"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Leave Battle Confirmation Modal */}
