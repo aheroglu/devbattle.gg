@@ -11,6 +11,14 @@ import {
 } from "@/components/shared/ui/card";
 import { Badge } from "@/components/shared/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/shared/ui/dialog";
+import {
   Users,
   Trophy,
   Send,
@@ -25,6 +33,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { BattleSession } from "@/types";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
@@ -40,22 +49,22 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const { id } = use(props.params);
   const supabase = createClientComponentClient();
 
+  const router = useRouter();
+
   // Battle data and loading states
   const [battle, setBattle] = useState<BattleSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [isParticipant, setIsParticipant] = useState(false);
 
   // Battle arena states
   const [timeLeft, setTimeLeft] = useState(0); // seconds
   const [code, setCode] = useState("// Loading...");
   const [isRunning, setIsRunning] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
-  const [participants] = useState([
-    { id: 1, name: "@codeNinja_42", progress: 75, rank: 1, avatar: "🥷" },
-    { id: 2, name: "@pythonMaster", progress: 60, rank: 2, avatar: "🐍" },
-    { id: 3, name: "@reactGuru", progress: 45, rank: 3, avatar: "⚛️" },
-    { id: 4, name: "@algorithmQueen", progress: 30, rank: 4, avatar: "👑" },
-  ]);
+  const [participants, setParticipants] = useState<any[]>([]);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   // Fetch battle data
   useEffect(() => {
@@ -73,8 +82,62 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
         }
 
         setBattle(data);
+        setLanguage(data.language);
         setTimeLeft(data.max_duration); // max_duration is already in seconds
         setCode(`// ${data.title} Challenge\n// Start coding here...\n\n`);
+
+        // Fetch participants with user data
+        const { data: participantData, error: participantError } =
+          await supabase
+            .from("battle_participants")
+            .select(
+              `
+            id,
+            user_id,
+            result,
+            created_at,
+            users!inner(
+              username,
+              avatar_url,
+              title
+            )
+          `
+            )
+            .eq("battle_id", id);
+
+        if (!participantError && participantData) {
+          setParticipantCount(participantData.length);
+
+          // Transform data for display
+          const transformedParticipants = participantData.map(
+            (p: any, index: number) => ({
+              id: p.id,
+              name: `@${p.users.username}`,
+              progress: Math.floor(Math.random() * 100), // Mock progress for now
+              rank: index + 1,
+              avatar: p.users.avatar_url ? "👤" : "🥷", // Mock avatar
+              title: p.users.title || "Developer",
+              result: p.result,
+            })
+          );
+
+          setParticipants(transformedParticipants);
+        }
+
+        // Check if current user is a participant (will be checked in auth effect)
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          const { data: userParticipant } = await supabase
+            .from("battle_participants")
+            .select("id")
+            .eq("battle_id", id)
+            .eq("user_id", session.user.id)
+            .single();
+
+          setIsParticipant(!!userParticipant);
+        }
       } catch (err) {
         setError("Failed to load battle");
       } finally {
@@ -94,7 +157,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
 
       if (!session) {
         // Redirect to login with current page as redirect
-        window.location.href = `/auth/login?redirect=/battle/${id}`;
+        router.push(`/auth/login?redirect=/battle/${id}`);
         return;
       }
     };
@@ -104,13 +167,80 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
     }
   }, [battle, id, supabase]);
 
+  // Realtime participant updates
+  useEffect(() => {
+    if (!battle) return;
+
+    const channel = supabase
+      .channel(`battle-${battle.id}-participants`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "battle_participants",
+          filter: `battle_id=eq.${battle.id}`,
+        },
+        async () => {
+          // Refetch participants when changes occur
+          const { data: participantData, error: participantError } =
+            await supabase
+              .from("battle_participants")
+              .select(
+                `
+              id,
+              user_id,
+              result,
+              created_at,
+              users!inner(
+                username,
+                avatar_url,
+                title
+              )
+            `
+              )
+              .eq("battle_id", battle.id);
+
+          if (!participantError && participantData) {
+            setParticipantCount(participantData.length);
+
+            const transformedParticipants = participantData.map(
+              (p: any, index: number) => ({
+                id: p.id,
+                name: `@${p.users.username}`,
+                progress: Math.floor(Math.random() * 100),
+                rank: index + 1,
+                avatar: p.users.avatar_url ? "👤" : "🥷",
+                title: p.users.title || "Developer",
+                result: p.result,
+              })
+            );
+
+            setParticipants(transformedParticipants);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [battle, supabase]);
+
   const editorRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  const [language, setLanguage] = useState("javascript");
+  const [language, setLanguage] = useState<string | null>("plaintext");
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Time's up! Handle timeout
+          handleBattleTimeout();
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
@@ -148,6 +278,63 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const runCode = () => {
     setIsRunning(true);
     setTimeout(() => setIsRunning(false), 2000);
+  };
+
+  const handleLeaveBattle = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      // Delete user from battle_participants
+      const { error } = await supabase
+        .from("battle_participants")
+        .delete()
+        .eq("battle_id", id)
+        .eq("user_id", session.user.id);
+
+      if (error) {
+        console.error("Error leaving battle:", error);
+        return;
+      }
+
+      // Redirect to battles page
+      router.push("/battles");
+    } catch (error) {
+      console.error("Error leaving battle:", error);
+    }
+  };
+
+  const handleBattleTimeout = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      console.log("Battle timeout - removing participant and redirecting");
+
+      // Delete user from battle_participants due to timeout
+      const { error } = await supabase
+        .from("battle_participants")
+        .delete()
+        .eq("battle_id", id)
+        .eq("user_id", session.user.id);
+
+      if (error) {
+        console.error("Error removing participant on timeout:", error);
+      }
+
+      // Redirect to battles page after timeout
+      setTimeout(() => {
+        router.push("/battles");
+      }, 1000); // Small delay to show timeout state
+    } catch (error) {
+      console.error("Error handling battle timeout:", error);
+    }
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -194,49 +381,49 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
     <div className="min-h-screen text-green-400 font-mono relative">
       {/* Header */}
       <div className="relative z-10 border-b border-green-400/30 bg-black/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className=" mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link href="/battles">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={() => setShowLeaveModal(true)}
+                className="text-gray-300 hover:text-red-400 hover:bg-red-400/10 transition-all duration-300 rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Leave Battle
+              </Button>
+            </div>
+            <div className="flex flex-col items-center space-y-2">
+              <h1 className="text-xl font-bold text-green-400">
+                {battle.title}
+              </h1>
+              <div className="flex items-center space-x-2">
+                <Badge
+                  className={`${getDifficultyColor(battle.difficulty).replace(
+                    "text-",
+                    "bg-"
+                  )}-500/20 ${getDifficultyColor(
+                    battle.difficulty
+                  )} border-${getDifficultyColor(battle.difficulty).replace(
+                    "text-",
+                    ""
+                  )}-400/30 rounded-full`}
                 >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Battles
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-green-400">
-                  {battle.title}
-                </h1>
-                <p className="text-sm text-gray-400">Battle ID: {id}</p>
+                  {battle.difficulty}
+                </Badge>
+                <Badge className="bg-blue-500/20 text-blue-400 border-blue-400/30 rounded-full">
+                  {battle.session_type}
+                </Badge>
               </div>
             </div>
 
             <div className="flex items-center space-x-4">
-              <Badge
-                className={`${getDifficultyColor(battle.difficulty).replace(
-                  "text-",
-                  "bg-"
-                )}-500/20 ${getDifficultyColor(
-                  battle.difficulty
-                )} border-${getDifficultyColor(battle.difficulty).replace(
-                  "text-",
-                  ""
-                )}-400/30 rounded-full`}
-              >
-                {battle.difficulty}
-              </Badge>
-              <Badge className="bg-blue-500/20 text-blue-400 border-blue-400/30 rounded-full">
-                {battle.session_type}
-              </Badge>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-400">
+                <div className="text-4xl font-bold text-green-400">
                   {formatTime(timeLeft)}
                 </div>
-                <div className="text-xs text-gray-400">Time Left</div>
+                <div className="text-gray-400">Time Left</div>
               </div>
             </div>
           </div>
@@ -310,39 +497,45 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
             <CardHeader>
               <CardTitle className="text-green-400 text-lg flex items-center">
                 <Users className="h-5 w-5 mr-2" />
-                Participants (4/50)
+                Participants ({participantCount}/50)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {participants.map((participant) => (
-                <div
-                  key={participant.id}
-                  className="flex items-center justify-between p-2 bg-black/30 rounded-lg"
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className="text-lg">{participant.avatar}</span>
-                    <div>
-                      <div className="text-blue-400 text-sm font-semibold">
-                        {participant.name}
+              {participants.length > 0 ? (
+                participants.map((participant) => (
+                  <div
+                    key={participant.id}
+                    className="flex items-center justify-between p-2 bg-black/30 rounded-lg"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-lg">{participant.avatar}</span>
+                      <div>
+                        <div className="text-blue-400 text-sm font-semibold">
+                          {participant.name}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {participant.title} • {participant.result}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500">
-                        Rank #{participant.rank}
+                    </div>
+                    <div className="text-right">
+                      <div className="text-green-400 text-sm font-bold">
+                        {participant.progress}%
+                      </div>
+                      <div className="w-16 bg-gray-700 rounded-full h-1 mt-1">
+                        <div
+                          className="h-full bg-gradient-to-r from-green-400 to-blue-400 rounded-full transition-all duration-1000"
+                          style={{ width: `${participant.progress}%` }}
+                        ></div>
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-green-400 text-sm font-bold">
-                      {participant.progress}%
-                    </div>
-                    <div className="w-16 bg-gray-700 rounded-full h-1 mt-1">
-                      <div
-                        className="h-full bg-gradient-to-r from-green-400 to-blue-400 rounded-full transition-all duration-1000"
-                        style={{ width: `${participant.progress}%` }}
-                      ></div>
-                    </div>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center text-gray-400 py-4">
+                  No participants yet. Be the first to join!
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </div>
@@ -364,23 +557,22 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
                     ? "js"
                     : language === "python"
                     ? "py"
+                    : language === "typescript"
+                    ? "ts"
+                    : language === "java"
+                    ? "java"
+                    : language === "cpp"
+                    ? "cpp"
+                    : language === "go"
+                    ? "go"
+                    : language === "rust"
+                    ? "rs"
+                    : language === "csharp"
+                    ? "cs"
+                    : language === "plaintext"
+                    ? "txt"
                     : language}
                 </span>
-
-                {/* Language Selector */}
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="bg-gray-900/50 border border-green-400/20 rounded-lg px-3 py-1 text-green-400 text-sm focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400 transition-all duration-300"
-                >
-                  <option value="javascript">JavaScript</option>
-                  <option value="python">Python</option>
-                  <option value="typescript">TypeScript</option>
-                  <option value="java">Java</option>
-                  <option value="cpp">C++</option>
-                  <option value="go">Go</option>
-                  <option value="rust">Rust</option>
-                </select>
               </div>
               <div className="flex items-center space-x-2">
                 <Button
@@ -401,20 +593,6 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
                     </>
                   )}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           </div>
@@ -423,7 +601,7 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           <div ref={editorRef} className="flex-1 bg-black/80">
             <MonacoEditor
               height="100%"
-              language={language}
+              language={language || "plaintext"}
               value={code}
               onChange={(value) => setCode(value || "")}
               theme="vs-dark"
@@ -594,6 +772,34 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           </div>
         </div>
       </div>
+
+      {/* Leave Battle Confirmation Modal */}
+      <Dialog open={showLeaveModal} onOpenChange={setShowLeaveModal}>
+        <DialogContent className="bg-black/95 border-red-400/30 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-red-400">Leave Battle?</DialogTitle>
+            <DialogDescription className="text-gray-300">
+              Are you sure you want to leave this battle? You will lose any
+              progress and won't be able to submit a solution.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowLeaveModal(false)}
+              className="text-gray-300 hover:text-white border-gray-600/30 hover:border-gray-400"
+            >
+              Stay in Battle
+            </Button>
+            <Button
+              onClick={handleLeaveBattle}
+              className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-400/30 hover:border-red-400"
+            >
+              Leave Battle
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

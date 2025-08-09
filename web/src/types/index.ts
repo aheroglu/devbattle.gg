@@ -48,6 +48,7 @@ export interface BattleSession {
   created_at: Date;
   updated_at: Date;
   technologies: string[]; // example: ['C#', 'Unity']
+  language: string;
 }
 
 export interface BattleParticipant {

@@ -55,11 +55,38 @@ export function BattleJoinModal({
 
       if (!session) {
         // Redirect to login with current page as redirect
-        window.location.href = `/auth/login?redirect=/battle/${battle.id}`;
+        router.push(`/auth/login?redirect=/battle/${battle.id}`);
         return;
       }
 
-      // User is authenticated, proceed to battle page
+      // Check if user is already a participant
+      const { data: existingParticipant } = await supabase
+        .from("battle_participants")
+        .select("id")
+        .eq("battle_id", battle.id)
+        .eq("user_id", session.user.id)
+        .single();
+
+      // If not already a participant, add them
+      if (!existingParticipant) {
+        console.log("User is not a participant");
+        const { error: participantError } = await supabase
+          .from("battle_participants")
+          .insert({
+            battle_id: battle.id,
+            user_id: session.user.id,
+            result: "PENDING",
+            xp_earned: 0,
+            submitted_at: null,
+          });
+
+        if (participantError) {
+          console.error("Error joining battle:", participantError);
+          throw new Error("Failed to join battle");
+        }
+      }
+
+      // User is authenticated and joined, proceed to battle page
       router.push(`/battle/${battle.id}`);
     } catch (error) {
       console.error("Error joining battle:", error);
@@ -70,7 +97,7 @@ export function BattleJoinModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-black/95 border-green-400/30 text-white backdrop-blur-sm">
+      <DialogContent className="max-w-2xl bg-black/95 border-green-400/30 text-white backdrop-blur-sm fixed top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] z-50">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-2xl font-bold text-green-400">

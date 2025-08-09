@@ -105,6 +105,7 @@
   body {
     background-color: hsl(var(--color-background));
     color: hsl(var(--color-foreground));
+    cursor: url('/custom-cursor-32x32.png'), auto;
   }
 }
 

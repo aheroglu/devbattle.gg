@@ -31,6 +31,7 @@ export function Navbar() {
   const navContainerRef = useRef<HTMLDivElement>(null);
   const navContentRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  // Top loader handled globally via nextjs-toploader (see RootLayout)
 
   // Navbar entrance animation
   useEffect(() => {
@@ -192,7 +193,7 @@ export function Navbar() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
-            <Link href="/">
+            <Link href="/" prefetch>
               <div className="flex items-center space-x-2 nav-item">
                 <div className="relative h-8 w-8">
                   <Image
@@ -218,6 +219,7 @@ export function Navbar() {
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch
                     className={`nav-item text-gray-300 hover:text-green-400 px-3 py-2 text-sm font-medium transition-all duration-300 relative group ${
                       pathname.startsWith(item.href)
                         ? "text-green-400 after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-green-400"
@@ -262,16 +264,20 @@ export function Navbar() {
                   >
                     <DropdownMenuItem
                       className="cursor-pointer hover:bg-green-400/10 hover:text-green-400 focus:bg-green-400/10 focus:text-green-400"
-                      onClick={() =>
-                        profile?.username && router.push("/profile")
-                      }
+                      onClick={() => {
+                        if (profile?.username) {
+                          router.push("/profile");
+                        }
+                      }}
                     >
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="cursor-pointer hover:bg-green-400/10 hover:text-green-400 focus:bg-green-400/10 focus:text-green-400"
-                      onClick={() => router.push("/settings")}
+                      onClick={() => {
+                        router.push("/settings");
+                      }}
                     >
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
@@ -290,12 +296,14 @@ export function Navbar() {
                 <>
                   <Link
                     href="/auth/login"
+                    prefetch
                     className="nav-item p-2 text-gray-300 hover:text-green-400 hover:bg-green-400/10 transition-all duration-300 rounded-xl"
                   >
                     Sign In
                   </Link>
                   <Link
                     href="/auth/register"
+                    prefetch
                     className="nav-item bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold px-4 py-2 rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg shadow-green-400/25"
                   >
                     Join Battle
@@ -329,8 +337,11 @@ export function Navbar() {
                   <Link
                     key={item.name}
                     href={item.href}
+                    prefetch
                     className="text-gray-300 hover:text-green-400 block px-3 py-2 text-sm font-medium transition-colors duration-300 hover:bg-green-400/10 rounded-xl"
-                    onClick={() => setIsMenuOpen(false)}
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                    }}
                   >
                     {item.name}
                   </Link>
@@ -373,16 +384,22 @@ export function Navbar() {
                     </div>
                     <Link
                       href={"/profile"}
+                      prefetch
                       className="flex items-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 px-3 py-2 rounded-xl"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                      }}
                     >
                       <User className="h-4 w-4 mr-2" />
                       Profile
                     </Link>
                     <Link
                       href="/settings"
+                      prefetch
                       className="flex items-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 px-3 py-2 rounded-xl"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                      }}
                     >
                       <Settings className="h-4 w-4 mr-2" />
                       Settings
@@ -402,15 +419,21 @@ export function Navbar() {
                   <div className="pt-3 space-y-2">
                     <Link
                       href="/auth/login"
+                      prefetch
                       className="block w-full text-center text-gray-300 hover:text-green-400 hover:bg-green-400/10 rounded-xl py-2"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                      }}
                     >
                       Sign In
                     </Link>
                     <Link
                       href="/auth/register"
+                      prefetch
                       className="block w-full text-center bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-black font-semibold rounded-xl py-2"
-                      onClick={() => setIsMenuOpen(false)}
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                      }}
                     >
                       Join Battle
                     </Link>

@@ -4,6 +4,7 @@ import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { InteractiveBackground } from "@/components/shared/interactive-background";
 import { Toaster } from "@/components/shared/ui/toaster";
+import NextTopLoader from "nextjs-toploader";
 
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ["latin"],
@@ -77,6 +78,14 @@ export default function RootLayout({
       <body
         className={`${ibmPlexMono.className} antialiased bg-black text-white relative`}
       >
+        <NextTopLoader
+          color="#22c55e"
+          height={3}
+          showSpinner={false}
+          easing="ease"
+          speed={200}
+          shadow="0 0 10px #22c55e,0 0 5px #22c55e"
+        />
         <div className="relative z-10">
           <InteractiveBackground />
           {children}
