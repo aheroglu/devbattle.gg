@@ -3,6 +3,8 @@ export type DifficultyLevel = "EASY" | "MEDIUM" | "HARD";
 export type SessionType = "SOLO" | "DUO";
 export type BattleResult = "PENDING" | "SUCCESS" | "FAILURE";
 export type ParticipantRole = "SOLVER" | "SPECTATOR";
+export type SubmissionStatus = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE"; // Accepted, Wrong Answer, Time Limit Exceeded, Memory Limit Exceeded, Runtime Error, Compilation Error
+export type ValidationType = "exact_match" | "numerical" | "array" | "custom";
 
 export interface User {
   id: string;
@@ -37,6 +39,30 @@ export interface UserAchievement {
   unlocked_at: Date;
 }
 
+export interface TestCase {
+  id: string;
+  input: any; // JSON format
+  expected_output: any; // JSON format
+  description?: string;
+  is_sample: boolean; // true for visible test cases, false for hidden
+}
+
+export interface ProblemDefinition {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: DifficultyLevel;
+  sample_test_cases: TestCase[];
+  hidden_test_cases: TestCase[];
+  starter_code: Record<string, string>; // {"javascript": "function solution() {...}", "python": "def solution():..."}
+  time_limit: number; // milliseconds
+  memory_limit: number; // MB
+  validation_type: ValidationType;
+  created_by: string;
+  created_at: Date;
+  updated_at: Date;
+}
+
 export interface BattleSession {
   id: string;
   title: string;
@@ -50,6 +76,8 @@ export interface BattleSession {
   updated_at: Date;
   technologies: string[]; // example: ['C#', 'Unity']
   language: string;
+  problem_id: string; // Reference to ProblemDefinition
+  problem?: ProblemDefinition; // Optional populated problem data
 }
 
 export interface BattleParticipant {
@@ -63,6 +91,33 @@ export interface BattleParticipant {
   role: ParticipantRole;
 }
 
+export interface TestResult {
+  test_case_id: string;
+  passed: boolean;
+  input: any;
+  expected: any;
+  actual: any;
+  execution_time: number; // milliseconds
+  memory_used: number; // bytes
+  error?: string;
+}
+
+export interface SubmissionResult {
+  id: string;
+  battle_id: string;
+  participant_id: string;
+  code: string;
+  language: string;
+  status: SubmissionStatus;
+  score: number; // 0-100
+  test_results: TestResult[];
+  execution_time: number; // total execution time in milliseconds
+  memory_used: number; // peak memory usage in bytes
+  compilation_error?: string;
+  runtime_error?: string;
+  submitted_at: Date;
+}
+
 export interface BattleSubmission {
   id: string;
   participant_id: string;
@@ -70,4 +125,5 @@ export interface BattleSubmission {
   language: string;
   is_final: boolean;
   created_at: Date;
+  result?: SubmissionResult; // Optional populated result data
 }

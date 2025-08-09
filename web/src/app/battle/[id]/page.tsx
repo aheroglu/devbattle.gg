@@ -30,7 +30,8 @@ import {
   Clock,
 } from "lucide-react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import { BattleSession, ParticipantRole } from "@/types";
+import { BattleSession, ParticipantRole, SubmissionResult } from "@/types";
+import { battleSubmissionService } from "@/lib/battle-submission-service";
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -69,6 +70,9 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const [chatMessage, setChatMessage] = useState("");
   const [participants, setParticipants] = useState<any[]>([]);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
+  const [canSubmit, setCanSubmit] = useState(false);
 
   // Fetch battle data
   useEffect(() => {
@@ -170,6 +174,22 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
           if (userParticipant) {
             setUserRole(userParticipant.role);
             console.log("User role:", userParticipant.role);
+
+            // Check if user can submit (only for SOLVER)
+            if (userParticipant.role === 'SOLVER') {
+              try {
+                const canSubmitResult = await battleSubmissionService.canUserSubmit(id);
+                setCanSubmit(canSubmitResult);
+
+                // Get existing submission if any
+                const existingSubmission = await battleSubmissionService.getUserSubmission(id);
+                if (existingSubmission) {
+                  setSubmissionResult(existingSubmission);
+                }
+              } catch (error) {
+                console.error('Error checking submission status:', error);
+              }
+            }
           }
         }
       } catch (err) {
@@ -352,6 +372,32 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
   const runCode = () => {
     setIsRunning(true);
     setTimeout(() => setIsRunning(false), 2000);
+  };
+
+  const handleSubmitSolution = async () => {
+    if (!battle || !canSubmit || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const result = await battleSubmissionService.submitSolution(id, code);
+      setSubmissionResult(result);
+      setCanSubmit(false);
+      
+      console.log('Submission result:', result);
+      
+      // Show success/failure message based on result
+      if (result.status === 'AC') {
+        console.log('🎉 Solution accepted!');
+      } else {
+        console.log('❌ Solution failed:', result.status);
+      }
+
+    } catch (error) {
+      console.error('Submission error:', error);
+      // Handle error (could show a toast or modal)
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleLeaveBattle = async () => {
@@ -773,20 +819,56 @@ export default function BattlePage(props: { params: Promise<{ id: string }> }) {
               <span className="text-green-400 text-sm font-semibold">
                 Output
               </span>
-              <Button
-                size="sm"
-                className="bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border border-blue-400/30 hover:border-blue-400 transition-all duration-300 rounded-xl"
-              >
-                Submit Solution
-              </Button>
+              {userRole === "SOLVER" && (
+                <Button
+                  size="sm"
+                  onClick={handleSubmitSolution}
+                  disabled={!canSubmit || isSubmitting}
+                  className={`border transition-all duration-300 rounded-xl ${
+                    submissionResult?.status === 'AC'
+                      ? "bg-green-500/20 hover:bg-green-500/40 text-green-400 border-green-400/30 hover:border-green-400"
+                      : canSubmit
+                      ? "bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 border-blue-400/30 hover:border-blue-400"
+                      : "bg-gray-500/20 text-gray-500 border-gray-500/30 cursor-not-allowed"
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Submitting...
+                    </>
+                  ) : submissionResult?.status === 'AC' ? (
+                    "✅ Accepted"
+                  ) : canSubmit ? (
+                    "Submit Solution"
+                  ) : (
+                    "Already Submitted"
+                  )}
+                </Button>
+              )}
             </div>
             <div className="bg-black p-3 rounded-lg border border-green-400/20 h-20 overflow-y-auto">
               <div className="text-gray-300 text-sm font-mono">
-                {isRunning ? (
+                {isSubmitting ? (
+                  <div className="text-yellow-400">Submitting solution and running tests...</div>
+                ) : submissionResult ? (
+                  <div className={`${
+                    submissionResult.status === 'AC' ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {submissionResult.status === 'AC' ? '🎉 Accepted!' : `❌ ${submissionResult.status}`} - 
+                    Score: {submissionResult.score}/100 ({submissionResult.test_results.filter(t => t.passed).length}/{submissionResult.test_results.length} tests passed)
+                    {submissionResult.compilation_error && (
+                      <div className="text-red-400 mt-1">Compilation Error: {submissionResult.compilation_error}</div>
+                    )}
+                    {submissionResult.runtime_error && (
+                      <div className="text-red-400 mt-1">Runtime Error: {submissionResult.runtime_error}</div>
+                    )}
+                  </div>
+                ) : isRunning ? (
                   <div className="text-yellow-400">Running tests...</div>
                 ) : (
                   <div className="text-gray-500">
-                    Click "Run Code" to test your solution
+                    {userRole === 'SOLVER' ? 'Click "Submit Solution" to run all tests' : 'Click "Run Code" to test your solution'}
                   </div>
                 )}
               </div>
