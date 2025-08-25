@@ -1,0 +1,217 @@
+// DevBattle.gg Database Schema
+// Custom Node.js + Express + PostgreSQL backend
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  DEVELOPER
+  ADMIN
+  MODERATOR
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum BattleStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+}
+
+enum ParticipantResult {
+  PENDING
+  SUCCESS
+  FAILURE
+}
+
+enum ParticipantRole {
+  SOLVER
+  SPECTATOR
+}
+
+enum SubmissionStatus {
+  AC  // Accepted
+  WA  // Wrong Answer
+  TLE // Time Limit Exceeded
+  MLE // Memory Limit Exceeded
+  RE  // Runtime Error
+  CE  // Compilation Error
+}
+
+enum ValidationType {
+  EXACT_MATCH
+  CUSTOM_VALIDATOR
+}
+
+// Main Models
+model User {
+  id                  String   @id @default(cuid())
+  username            String   @unique
+  email               String   @unique
+  avatar_url          String?
+  xp                  Int      @default(0)
+  level               Int      @default(1)
+  battles_won         Int      @default(0)
+  battles_lost        Int      @default(0)
+  rank                Int?
+  title               String?
+  badge               String?
+  win_rate            Float    @default(0)
+  last_active         DateTime @default(now())
+  preferred_languages String[]
+  full_name           String?
+  website             String?
+  github_url          String?
+  twitter_url         String?
+  bio                 String?
+  location            String?
+  role                UserRole @default(DEVELOPER)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  // OAuth fields
+  google_id           String?  @unique
+  github_id           String?  @unique
+  
+  // Password for email/password auth
+  password_hash       String?
+
+  // Relations
+  battle_participants BattleParticipant[]
+  created_battles     BattleSession[]    @relation("CreatedBattles")
+  achievements        UserAchievement[]
+
+  @@index([username])
+  @@index([email])
+  @@index([xp])
+  @@index([level])
+  @@index([rank])
+  @@map("users")
+}
+
+model BattleSession {
+  id                String        @id @default(cuid())
+  title             String
+  description       String?
+  status            BattleStatus  @default(WAITING)
+  difficulty        DifficultyLevel
+  language          String
+  max_duration      Int           // in minutes
+  max_participants  Int           @default(2)
+  start_time        DateTime?
+  end_time          DateTime?
+  winner_id         String?
+  created_at        DateTime      @default(now())
+  updated_at        DateTime      @updatedAt
+
+  // Relations
+  creator_id        String
+  creator           User            @relation("CreatedBattles", fields: [creator_id], references: [id], onDelete: Cascade)
+  problem_id        String
+  problem           ProblemDefinition @relation(fields: [problem_id], references: [id])
+  participants      BattleParticipant[]
+
+  @@index([status])
+  @@index([difficulty])
+  @@index([language])
+  @@index([created_at])
+  @@index([creator_id])
+  @@map("battle_sessions")
+}
+
+model BattleParticipant {
+  id                String            @id @default(cuid())
+  battle_id         String
+  user_id           String
+  role              ParticipantRole   @default(SOLVER)
+  result            ParticipantResult @default(PENDING)
+  score             Int?
+  completion_time   DateTime?
+  joined_at         DateTime          @default(now())
+
+  // Relations
+  battle            BattleSession     @relation(fields: [battle_id], references: [id], onDelete: Cascade)
+  user              User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  submissions       SubmissionResult[]
+
+  @@unique([battle_id, user_id])
+  @@index([battle_id])
+  @@index([user_id])
+  @@index([role])
+  @@index([result])
+  @@map("battle_participants")
+}
+
+model ProblemDefinition {
+  id                String            @id @default(cuid())
+  title             String
+  description       String
+  difficulty        DifficultyLevel
+  sample_test_cases Json              // TestCase[]
+  hidden_test_cases Json              // TestCase[]
+  starter_code      Json              // Record<string, string>
+  time_limit        Int               @default(5000)   // in milliseconds
+  memory_limit      Int               @default(256000) // in KB
+  validation_type   ValidationType    @default(EXACT_MATCH)
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+
+  // Relations
+  battles           BattleSession[]
+
+  @@index([difficulty])
+  @@index([title])
+  @@map("problem_definitions")
+}
+
+model SubmissionResult {
+  id               String            @id @default(cuid())
+  battle_id        String
+  participant_id   String
+  code             String
+  language         String
+  status           SubmissionStatus
+  execution_time   Float?            // in milliseconds
+  memory_usage     Int?              // in KB
+  test_results     Json              // TestResult[]
+  total_tests      Int
+  passed_tests     Int
+  error_message    String?
+  submitted_at     DateTime          @default(now())
+
+  // Relations
+  participant      BattleParticipant @relation(fields: [participant_id], references: [id], onDelete: Cascade)
+
+  @@index([battle_id])
+  @@index([participant_id])
+  @@index([status])
+  @@index([submitted_at])
+  @@map("submission_results")
+}
+
+model UserAchievement {
+  id           String   @id @default(cuid())
+  user_id      String
+  title        String
+  description  String
+  badge_url    String?
+  earned_at    DateTime @default(now())
+
+  // Relations
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, title])
+  @@map("user_achievements")
+}
