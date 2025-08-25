@@ -9,11 +9,15 @@ import rateLimit from 'express-rate-limit';
 import passport from './config/passport';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error-handler';
+import { SocketService } from './services/socket.service';
+import { SocketController } from './controllers/socket.controller';
+import { attachSocketService } from './middleware/socket';
 
 // Route imports
 import authRoutes from './routes/auth.routes';
 import battleRoutes from './routes/battle.routes';
 import userRoutes from './routes/user.routes';
+import socketRoutes from './routes/socket.routes';
 
 // Load environment variables
 dotenv.config();
@@ -68,19 +72,18 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Initialize Socket.IO service
+const socketService = new SocketService(io as any);
+SocketController.setSocketService(socketService);
+
+// Attach socket service to all API routes
+app.use('/api', attachSocketService(socketService));
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/battles', battleRoutes);
 app.use('/api/users', userRoutes);
-
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  logger.info(`Client connected: ${socket.id}`);
-  
-  socket.on('disconnect', () => {
-    logger.info(`Client disconnected: ${socket.id}`);
-  });
-});
+app.use('/api/socket', socketRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

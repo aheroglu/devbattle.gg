@@ -2,6 +2,7 @@ import { prisma } from '../config/database';
 import { AppError } from '../middleware/error-handler';
 import { logger } from '../utils/logger';
 import { CodeExecutionService } from './code-execution.service';
+import { SocketController } from '../controllers/socket.controller';
 
 export interface CreateBattleData {
   title: string;
@@ -233,6 +234,9 @@ export class BattleService {
 
       logger.info(`Battle created: ${battle.id} by ${creator.username}`);
       
+      // Emit real-time event
+      SocketController.handleBattleCreated(battle);
+      
       return battle;
     } catch (error) {
       logger.error('Create battle error:', error);
@@ -330,6 +334,9 @@ export class BattleService {
       });
 
       logger.info(`Battle deleted: ${battleId} by ${userId}`);
+      
+      // Emit real-time event
+      SocketController.handleBattleDeleted(battleId);
     } catch (error) {
       logger.error('Delete battle error:', error);
       if (error instanceof AppError) throw error;
@@ -394,6 +401,10 @@ export class BattleService {
 
       logger.info(`User ${userId} joined battle ${battleId} as ${role}`);
       
+      // Emit real-time event
+      const participantCount = battle.participants.length + 1; // +1 for the new participant
+      SocketController.handleBattleJoin(battleId, participant, participantCount);
+      
       return participant;
     } catch (error) {
       logger.error('Join battle error:', error);
@@ -436,7 +447,15 @@ export class BattleService {
         where: { id: participant.id }
       });
 
+      // Get updated participant count
+      const updatedParticipantCount = await prisma.battleParticipant.count({
+        where: { battle_id: battleId }
+      });
+
       logger.info(`User ${userId} left battle ${battleId}`);
+      
+      // Emit real-time event
+      SocketController.handleBattleLeave(battleId, updatedParticipantCount);
     } catch (error) {
       logger.error('Leave battle error:', error);
       if (error instanceof AppError) throw error;
@@ -535,6 +554,21 @@ export class BattleService {
       }
 
       logger.info(`Solution submitted for battle ${battleId} by user ${userId}: ${executionResult.status}`);
+      
+      // Get username for real-time event
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { username: true }
+      });
+      
+      // Emit real-time event
+      SocketController.handleSubmissionResult({
+        battleId,
+        userId,
+        username: user?.username || 'Unknown',
+        result: executionResult,
+        isSuccess: executionResult.status === 'AC'
+      });
       
       return {
         ...submission,
@@ -698,6 +732,9 @@ export class BattleService {
 
       logger.info(`Battle started: ${battleId} by ${userId}`);
       
+      // Emit real-time event
+      SocketController.handleBattleStarted(battleId, updatedBattle.start_time!, battle.max_duration);
+      
       return updatedBattle;
     } catch (error) {
       logger.error('Start battle error:', error);
@@ -768,6 +805,9 @@ export class BattleService {
       }
 
       logger.info(`Battle ended: ${battleId} by ${userId}, winner: ${winner?.user_id || 'none'}`);
+      
+      // Emit real-time event
+      SocketController.handleBattleEnded(battleId, winner?.user_id);
       
       return updatedBattle;
     } catch (error) {
