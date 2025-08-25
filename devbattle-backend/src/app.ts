@@ -12,6 +12,8 @@ import { errorHandler } from './middleware/error-handler';
 
 // Route imports
 import authRoutes from './routes/auth.routes';
+import battleRoutes from './routes/battle.routes';
+import userRoutes from './routes/user.routes';
 
 // Load environment variables
 dotenv.config();
@@ -68,8 +70,8 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/battles', (req, res) => res.json({ message: 'Battle routes - Coming soon!' }));
-app.use('/api/users', (req, res) => res.json({ message: 'User routes - Coming soon!' }));
+app.use('/api/battles', battleRoutes);
+app.use('/api/users', userRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
